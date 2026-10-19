@@ -36,6 +36,14 @@ Eight complete examples ship with the skill. Open the closest one before you sta
 
 The test rig is the quality bar for the drawing itself. The Raptor is the bar for shader work: a WebGL effect has to reach its standard of world-space, no-pop, seamless rendering.
 
+## Evidence and fidelity
+
+Distinguish conceptual illustrations, reference-based depictions and engineering
+deliverables. Identify invented geometry, simplifications and unknowns; preserve
+supplied dimensions, relationships and sources. Identify the data, models and
+assumptions behind readouts and animations. Geometry audits check represented
+geometry, not physical correctness or manufacturing suitability.
+
 ## The one idea that matters
 
 **The object is the explanation.** Don't draw boxes, arrows and labels. Invent a real, well-made physical thing whose working *is* the concept. Here is how earlier figures mapped:
