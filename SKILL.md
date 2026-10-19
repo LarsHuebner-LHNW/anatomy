@@ -1,6 +1,6 @@
 ---
 name: anatomy
-description: Build crafted, highly detailed, interactive isometric SVG figures that explain a technical idea as a real physical object (a test rig, a dial gauge, a cabinet of drawers, a plotter, a lock), with many small precise solid parts, four-tone shading, correct painter's order, a framed card with title, hint and live readout, and calm eased motion. Use this whenever someone wants an isometric illustration, an explanatory diagram or figure for docs, a blog post, a landing page or an article, a "Linear-style" or "premium" technical drawing, an interactive explainer, or an SVG that shows how a system, algorithm or component works, even if they never say "isometric". Works framework-free (TypeScript/JS that writes SVG and HTML) and in React/Next.js, and can add realistic WebGL shaders (fire, exhaust, water, caustics, lamp light) that live inside the drawing in the same isometric perspective. Also prints a figure as an A4 PDF (poster, drawing or handout).
+description: Create or edit detailed isometric SVG figures of physical mechanisms, cutaways, exploded assemblies and interactive apparatus. Use when Anatomy is explicitly requested for a figure, or when this physical illustration approach fits the requested result. Do not select for generic diagrams, software workflows, scientific data plots, manufacturing CAD or visual polish alone.
 license: MIT
 compatibility: Written for Claude Code; also runs in Antigravity, OpenCode, Codex and MiniMax Code. Needs Node.js 20.10+, and Chrome or Chromium for the checks.
 metadata:
@@ -8,6 +8,14 @@ metadata:
 ---
 
 # Anatomy
+
+## When to use
+
+Use Anatomy when explicitly requested for a figure, or when a physical mechanism, cutaway, exploded view or interactive apparatus illustration helps explain the subject. The words "diagram", "figure", "interactive", "premium" or "isometric" alone are not enough to select it. A vague request does not authorize replacing the requested representation with an invented machine.
+
+Keep workflow diagrams with diagramming tools, scientific data plots with scientific visualization, and dimensioned manufacturing parts with CAD. Respect the user's chosen tools and output formats. In a mixed task, apply Anatomy only to the matching illustration; it has no priority over other skills, MCPs or plugins and must not change their configuration.
+
+Automatic selection remains available when this scope fits, including selection by a lead or diagrammer. Apply the drawing workflow below only after selecting Anatomy for the figure.
 
 Keep private work local. Sharing or publication is a manual action outside this skill.
 
@@ -65,7 +73,7 @@ Work in this order. Write the concept and the parts list before any geometry. Mo
    - **Epic**: a whole vehicle, building or plant with many moving systems, or the 3D mode on more than one subject. 6 hours or more. Do not start it. Give the estimate, propose a Hero version that keeps the core of the idea, and list what the full version would add. Build the Epic only when the user chooses it.
    - Whatever the size, have a working page that opens in the browser within the first hour, and deepen it from there. Run `date` at the start and at each step, and when a step runs past twice its share of the estimate, tell the user where it stands and what is left.
 2. **Truth first.** Collect the real numbers and behaviour of the thing being explained: sizes, counts, thresholds, curves. The readout, motion and caption must all be true. If you can, write the model as a small pure module, like `rig.ts` in the test-rig example, and drive everything from it.
-3. **Invent the object.** Pick a machine, tool, instrument or piece of furniture whose mechanism maps one-to-one onto the concept. Say in one sentence what moves and what that motion means. Never copy a reference image: take its finish, not its object.
+3. **Choose the object.** For a real apparatus, use supplied references to preserve its components and layout. For an abstract concept, pick a machine, tool, instrument or piece of furniture whose mechanism maps one-to-one onto the concept. Say in one sentence what moves and what that motion means. For style references, take the finish, not the object.
 4. **Parts list.** Write at least 40 parts (40–80 for a Figure, 80–150 for a Hero, more for an Epic), grouped: base (plate, feet, groove, corner screws, label plate, ruler strip), structure (posts, rails, frame bars, end stops), mechanism (carriage, bushings, springs, plunger, needle), controls (knurled knob, thumb screw, crown) and the subject itself, which is the one lit part. Each part sits on another part. `references/craft.md` has a vocabulary of parts with recipes.
 5. **Plan the world.** Use world units of about 1 px of the real thing: x and y on the floor, z up. Lay out plans as rounded rectangles `{x, y, w, d, r}` and circles. Choose the camera: azimuth 45° by default, 35–60° to show the long side, elevation 30° (higher, like the ripple tank's 44°, to look into something open). Then fit with `fitProjection(points, width, height, { pad, azimuth })`.
 6. **Build geometry once.** Precompute every static path in a geometry module with the kit: `slabOf`, `cylinder`, `extrude`, `planOutline`, `topTicks`, `knurl`, `coil`, `radialTicks` and so on. Round parts on any axis (bells, flanges, valves, actuators) come from `kit/lathe.mjs`, and pipes and cables from `kit/tube.mjs`. Moving parts are built once at a rest position and moved with `translateAlong`. Only parts whose shape changes are rebuilt per frame.

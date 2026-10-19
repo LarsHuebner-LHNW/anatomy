@@ -12,6 +12,7 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Narrowed automatic skill selection to physical mechanisms, cutaways, exploded views and apparatus illustrations. Explicit figure requests still select Anatomy; generic diagrams, data plots and manufacturing CAD stay with their appropriate tools.
 - Browser helpers stop owned processes before removing profiles, handle interruption and connection failures, and clean temporary print data on errors. `printPdf` is now asynchronous; callers must await it.
 - Added an ignored `private/` directory for local sources and exports.
 - Browser helpers omit private page content from normal command output; `--diagnostics` opts into detailed output.
