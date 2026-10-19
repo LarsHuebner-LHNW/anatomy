@@ -1,9 +1,9 @@
 import { chromePort } from "./chrome-port.mjs";
+import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
   const child = spawn(process.execPath, ["--experimental-websocket", ...process.argv.slice(1)], { stdio: "inherit" });
@@ -32,6 +32,7 @@ function usage() {
                       saved as name-<ms>.png; a capture takes 60-200 ms, so delays closer than that run late
   --reduced           emulate prefers-reduced-motion: reduce
   --theme <dark|light>  emulate prefers-color-scheme
+  --allow-origin <url>  explicitly allow this exact loopback development-server origin
 
 Prints the clip box, console errors, uncaught exceptions and whether the page scrolls sideways.`);
 }
@@ -55,6 +56,7 @@ function parse(argv) {
     else if (arg === "--times") options.times = next().split(",").map(Number);
     else if (arg === "--reduced") options.reduced = true;
     else if (arg === "--theme") options.theme = next();
+    else if (arg === "--allow-origin") options.allowOrigin = next();
     else if (arg === "--help" || arg === "-h") options.help = true;
     else rest.push(arg);
   }
@@ -115,13 +117,13 @@ async function main() {
     console.error(`capture: ${problem}`);
     process.exit(1);
   }
-  const url = /^https?:|^file:/.test(options.target) ? options.target : pathToFileURL(resolve(options.target)).href;
   const out = resolve(options.out ?? "capture.png");
   const binary = chromePath();
   if (!binary) {
     console.error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
     process.exit(1);
   }
+  const access = await browserTarget(options.target, options.allowOrigin);
   const profile = mkdtempSync(join(tmpdir(), "iso-capture-"));
   const chrome = spawn(binary, [
     "--headless=new",
@@ -130,13 +132,14 @@ async function main() {
     "--no-first-run",
     "--no-default-browser-check",
     "--hide-scrollbars",
-    "--allow-file-access-from-files",
+    ...accessFlags,
     "--enable-unsafe-swiftshader",
     "--ignore-gpu-blocklist",
     "about:blank",
   ]);
   const port = await chromePort(chrome, profile);
   const finish = (code) => {
+    access.close();
     chrome.kill("SIGKILL");
     try {
       rmSync(profile, { recursive: true, force: true });
@@ -181,6 +184,7 @@ async function main() {
     const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
     await send("Runtime.enable");
     await send("Page.enable");
+    const checkAccess = await restrictBrowser(socket, send, access.origin);
     const features = [];
     if (options.reduced) features.push({ name: "prefers-reduced-motion", value: "reduce" });
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
@@ -190,7 +194,7 @@ async function main() {
       loaded = done;
       setTimeout(done, 10000);
     });
-    const navigation = await send("Page.navigate", { url });
+    const navigation = await send("Page.navigate", { url: access.url });
     if (navigation.error) throw new Error(`Navigation failed: ${navigation.error.message}`);
     if (navigation.result?.errorText) throw new Error(`Navigation failed: ${navigation.result.errorText}`);
     await load;
@@ -256,6 +260,7 @@ async function main() {
     }
     const sideways = await evaluate(`document.documentElement.scrollWidth > innerWidth + 1`);
     const readout = await readoutOf();
+    checkAccess();
     console.log(`saved ${out}`);
     console.log(`clip ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)} · readout "${readout}" · scrolls sideways: ${sideways ? "YES" : "no"}`);
     if (readouts.length) console.log(`readout over time: ${readouts.join(" · ")}`);

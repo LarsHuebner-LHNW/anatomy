@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FORMATS, PAPER, pagesOf, sheetHtml } from "./print-sheet.mjs";
@@ -23,35 +23,6 @@ function usage() {
   --out name    output base name (default: the spec's out, else the page name)
 
 Writes <name>-<format>-a4.html and .pdf next to the spec.`);
-}
-
-export function chromePath() {
-  const candidates = [
-    process.env.CHROME_PATH,
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary",
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/usr/bin/chromium",
-    "/usr/bin/chromium-browser",
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    ...(process.env.LOCALAPPDATA ? [join(process.env.LOCALAPPDATA, "Google\\Chrome\\Application\\chrome.exe")] : []),
-    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-  ].filter(Boolean);
-  const playwright = join(homedir(), "Library/Caches/ms-playwright");
-  if (existsSync(playwright)) {
-    for (const dir of readdirSync(playwright).sort().reverse()) {
-      for (const sub of ["chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing", "chrome-mac/Chromium.app/Contents/MacOS/Chromium", "chrome-linux/chrome"]) {
-        candidates.push(join(playwright, dir, sub));
-      }
-    }
-  }
-  const linux = join(homedir(), ".cache/ms-playwright");
-  if (existsSync(linux)) for (const dir of readdirSync(linux).sort().reverse()) for (const sub of ["chrome-linux64/chrome", "chrome-linux/chrome"]) candidates.push(join(linux, dir, sub));
-  return candidates.find((path) => existsSync(path));
 }
 
 export function captureScript(spec) {
@@ -132,12 +103,13 @@ export function captureScript(spec) {
 })()`;
 }
 
-function drive(page, actions, { reduced, width, height }) {
+function drive(page, actions, { reduced, width, height, scale = 1, allowOrigin }) {
   const profile = mkdtempSync(join(tmpdir(), "iso-print-"));
   const file = join(profile, "actions.json");
   writeFileSync(file, JSON.stringify(actions));
-  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height)];
+  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height), "--scale", String(scale)];
   if (reduced) args.push("--reduced");
+  if (allowOrigin) args.push("--allow-origin", allowOrigin);
   const log = join(profile, "out.txt");
   const fd = openSync(log, "w");
   const run = spawnSync(process.execPath, args, { stdio: ["ignore", fd, "pipe"], encoding: "utf8", maxBuffer: 1 << 26 });
@@ -152,7 +124,7 @@ function drive(page, actions, { reduced, width, height }) {
 }
 
 export async function capture(spec, pagePath) {
-  const options = { reduced: spec.reduced ?? true, width: spec.width ?? 1200, height: spec.height ?? 1200 };
+  const options = { reduced: spec.reduced ?? true, width: spec.width ?? 1200, height: spec.height ?? 1200, allowOrigin: spec.allowOrigin };
   const views = Object.entries(spec.views ?? { rest: {} });
   const script = captureScript(spec);
   const actions = [["wait", spec.settle ?? 1200]];
@@ -195,15 +167,13 @@ export async function capture(spec, pagePath) {
 }
 
 export function printPdf(htmlFile, pdfFile, { png, paper, pages: expected = 1 } = {}) {
-  const binary = chromePath();
-  if (!binary) throw new Error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
-  const profile = mkdtempSync(join(tmpdir(), "iso-print-pdf-"));
-  const common = ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--no-default-browser-check", "--mute-audio", "--allow-file-access-from-files", `--user-data-dir=${profile}`];
-  const url = pathToFileURL(htmlFile).href;
   if (existsSync(pdfFile)) rmSync(pdfFile);
-  spawnSync(binary, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfFile}`, url], { stdio: "ignore", timeout: 120000 });
-  if (png) spawnSync(binary, [...common, "--force-device-scale-factor=2", `--window-size=${paper.px[0]},${paper.px[1] * expected}`, `--screenshot=${png}`, `${url}?print`], { stdio: "ignore", timeout: 120000 });
-  rmSync(profile, { recursive: true, force: true });
+  const width = paper?.px[0] ?? 1200;
+  const height = (paper?.px[1] ?? 1200) * expected;
+  const actions = [];
+  if (png) actions.push(["eval", "document.documentElement.classList.add('ps-bare'); true"], ["shot", png, "html", 1, [0, 0, width, height]]);
+  actions.push(["pdf", pdfFile]);
+  drive(htmlFile, actions, { reduced: true, width, height, scale: png ? 2 : 1 });
   if (!existsSync(pdfFile) || !statSync(pdfFile).size) throw new Error(`Chrome did not write ${pdfFile}`);
   const pages = (readFileSync(pdfFile, "latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
   return { pages, bytes: statSync(pdfFile).size };

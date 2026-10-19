@@ -1,9 +1,9 @@
 import { chromePort } from "./chrome-port.mjs";
+import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { LINE_ENDS } from "./line-ends.mjs";
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
@@ -23,6 +23,7 @@ function usage() {
   --theme t     emulate prefers-color-scheme: dark or light (only pages that read the media query follow it)
   --no-webgl    make canvas.getContext("webgl"/"webgl2") return null, to check the SVG fallback
   --preload js  run a script before the page's own scripts (counters, stubs, hooks)
+  --allow-origin url  explicitly allow this exact loopback development-server origin
   Kit pages set their theme at build time (body data-theme), so drive the -light.html build for light.
   Put anything with eval strings in an --actions file: inline JSON quoting breaks easily.
 
@@ -42,6 +43,7 @@ Fractions are 0..1 across the element.
   ["until", js, timeoutMs?]               poll a JS expression until it is truthy (default 10 s); a timeout stops the run with exit 1
   ["eval", js]                            run JS in the page and print the result
   ["shot", out.png, sel?, scale?, [x,y,w,h]?]           screenshot an element, or a region of it in CSS px
+  ["pdf", out.pdf]                        print using the page's CSS paper size, without headers
   ["lines", out.png?, sel?, options?]     check every texture line's two ends: each must land on a stroke, a dot or an outline
                                           (within options.tolerance, 1 viewBox px), or hide under a fill painted later; a short
                                           straight mark (a tick) needs one rooted end; lines with data-free and fade ramps are
@@ -107,12 +109,13 @@ async function main() {
     else if (arg === "--theme") options.theme = argv[++index];
     else if (arg === "--no-webgl") options.noWebgl = true;
     else if (arg === "--preload") options.preload = readFileSync(argv[++index], "utf8");
+    else if (arg === "--allow-origin") options.allowOrigin = argv[++index];
     else if (arg === "--actions") options.actions = JSON.parse(readFileSync(argv[++index], "utf8"));
     else rest.push(arg);
   }
   const [target, script] = rest;
   const actions = options.actions ?? JSON.parse(script ?? "[]");
-  const kinds = new Set(["scroll", "wait", "move", "click", "drag", "key", "slow", "until", "eval", "shot", "lines", "turn", "orbit", "sheet"]);
+  const kinds = new Set(["scroll", "wait", "move", "click", "drag", "key", "slow", "until", "eval", "shot", "pdf", "lines", "turn", "orbit", "sheet"]);
   if (!Array.isArray(actions)) throw new Error("actions must be an array");
   for (const action of actions) {
     if (!Array.isArray(action) || !kinds.has(action[0])) throw new Error(`unknown action ${Array.isArray(action) ? action[0] : action}`);
@@ -125,16 +128,17 @@ async function main() {
       if (!Number.isFinite(every) || every < 0 || !Number.isInteger(count) || count < 1) throw new Error(`sheet needs a non-negative every and a whole count of at least 1, got every ${every} and count ${count}`);
     }
   }
-  const url = /^https?:|^file:/.test(target) ? target : pathToFileURL(resolve(target)).href;
   const binary = chromePath();
   if (!binary) {
     console.error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
     process.exit(1);
   }
+  const access = await browserTarget(target, options.allowOrigin);
   const profile = mkdtempSync(join(tmpdir(), "iso-drive-"));
-  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
+  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", ...accessFlags, "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
   const port = await chromePort(chrome, profile);
   const finish = (code) => {
+    access.close();
     chrome.kill("SIGKILL");
     try {
       rmSync(profile, { recursive: true, force: true });
@@ -185,6 +189,7 @@ async function main() {
     const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
     await send("Runtime.enable");
     await send("Page.enable");
+    const checkAccess = await restrictBrowser(socket, send, access.origin);
     const features = [];
     if (options.reduced) features.push({ name: "prefers-reduced-motion", value: "reduce" });
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
@@ -198,7 +203,7 @@ async function main() {
       loaded = done;
       setTimeout(done, 10000);
     });
-    const navigation = await send("Page.navigate", { url });
+    const navigation = await send("Page.navigate", { url: access.url });
     if (navigation.error) throw new Error(`Navigation failed: ${navigation.error.message}`);
     if (navigation.result?.errorText) throw new Error(`Navigation failed: ${navigation.result.errorText}`);
     await load;
@@ -259,6 +264,11 @@ async function main() {
         const code = args[2] ?? (named[key] ?? (/^[0-9]$/.test(key) ? `Digit${key}` : key.length === 1 ? `Key${key.toUpperCase()}` : key));
         await send("Input.dispatchKeyEvent", { type: "keyDown", key, code, text: key === "Enter" ? "\r" : key.length === 1 ? key : undefined, windowsVirtualKeyCode: key === " " ? 32 : key === "Enter" ? 13 : 0 });
         await send("Input.dispatchKeyEvent", { type: "keyUp", key, code, windowsVirtualKeyCode: key === "Enter" ? 13 : undefined });
+      } else if (kind === "pdf") {
+        const reply = await send("Page.printToPDF", { printBackground: true, preferCSSPageSize: true, displayHeaderFooter: false });
+        if (reply.error || !reply.result?.data) throw new Error("Chrome did not produce a PDF");
+        save(args[0], reply.result.data);
+        console.log(`pdf ${args[0]}`);
       } else if (kind === "eval") console.log("eval:", JSON.stringify(await evaluate(args[0])));
       else if (kind === "slow") await evaluate(`window.__driveSpeed=${Number(args[0])}`);
       else if (kind === "until") {
@@ -322,6 +332,7 @@ async function main() {
         failed += result.problems.length;
       }
     }
+    checkAccess();
     console.log(problems.length ? problems.join("\n") : "console: clean");
     socket.close();
     finish(failed ? 1 : 0);
