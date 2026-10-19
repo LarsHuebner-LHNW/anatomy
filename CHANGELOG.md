@@ -12,6 +12,7 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Removed the community publisher and its instructions. Sharing is a manual action outside the skill.
 - A Figure no longer quotes a time to the user. The 30–90 minute estimate was often far longer than the build itself ([#41](https://github.com/wheresryan22/anatomy/issues/41)).
 
 ### Fixed
