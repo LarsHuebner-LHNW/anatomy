@@ -1,13 +1,15 @@
-import { chromePort } from "./chrome-port.mjs";
-import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
+import { browserSession, forwardSignals } from "./browser-session.mjs";
+import { browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { LINE_ENDS } from "./line-ends.mjs";
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
   const child = spawn(process.execPath, ["--experimental-websocket", ...process.argv.slice(1)], { stdio: "inherit" });
+  forwardSignals(child);
   child.on("exit", (code) => process.exit(code ?? 1));
 } else {
   await main();
@@ -42,13 +44,13 @@ Fractions are 0..1 across the element.
   ["slow", factor]                        run the page's requestAnimationFrame and performance.now clock at factor x real
                                           time (0.05 = 20x slow motion) so sheets catch 100 ms events; ["slow", 1] restores it
   ["until", js, timeoutMs?]               poll a JS expression until it is truthy (default 10 s); a timeout stops the run with exit 1
-  ["eval", js]                            run JS in the page and print the result
+  ["eval", js]                            run JS in the page (print the result with --diagnostics)
   ["shot", out.png, sel?, scale?, [x,y,w,h]?]           screenshot an element, or a region of it in CSS px
   ["pdf", out.pdf]                        print using the page's CSS paper size, without headers
   ["lines", out.png?, sel?, options?]     check every texture line's two ends: each must land on a stroke, a dot or an outline
                                           (within options.tolerance, 1 viewBox px), or hide under a fill painted later; a short
                                           straight mark (a tick) needs one rooted end; lines with data-free and fade ramps are
-                                          exempt. Prints each floating end in card px; out.png marks them with rings. Any failure
+                                          exempt. With --diagnostics prints each floating end in card px; out.png marks them with rings. Any failure
                                           makes the run exit 1
   ["turn", value, group?]                 set a 3D figure's turn through window.__isoTurn (a number sets the first turn group,
                                           group names another), then wait two animation frames
@@ -136,51 +138,21 @@ async function main() {
     process.exit(1);
   }
   const access = await browserTarget(target, options.allowOrigin);
-  const profile = mkdtempSync(join(tmpdir(), "iso-drive-"));
-  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", ...accessFlags, "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
-  const port = await chromePort(chrome, profile);
-  const finish = (code) => {
-    access.close();
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
-    process.exit(code);
-  };
+  const session = await browserSession(binary, "iso-drive-", access);
   try {
-    const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
-    const socket = new WebSocket(page.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
+    const { socket, send } = session;
     const problems = [];
     let loaded = () => {};
     socket.onmessage = (message) => {
       const data = JSON.parse(message.data);
       if (data.method === "Page.loadEventFired") loaded();
-      if (data.id && pending.has(data.id)) {
-        pending.get(data.id)(data);
-        pending.delete(data.id);
-      } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
+      if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
         problems.push(options.diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 600)}` : data.params.type);
       } else if (data.method === "Runtime.exceptionThrown") {
         const detail = data.params.exceptionDetails;
         problems.push(options.diagnostics ? `exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600) : "exception");
       }
     };
-    await new Promise((done) => (socket.onopen = done));
-    const send = (method, params = {}, patience = 60000) =>
-      new Promise((done, fail) => {
-        const call = ++id;
-        const timer = setTimeout(() => {
-          pending.delete(call);
-          fail(new Error(`Chrome did not answer ${method} within ${Math.round(patience / 1000)} s`));
-        }, patience);
-        pending.set(call, (data) => {
-          clearTimeout(timer);
-          done(data);
-        });
-        socket.send(JSON.stringify({ id: call, method, params }));
-      });
     const evaluate = async (expression, patience) => {
       const reply = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, patience);
       if (reply.error) throw new Error(reply.error.message);
@@ -188,7 +160,7 @@ async function main() {
       if (exception) throw new Error(exception.exception?.description ?? exception.text);
       return reply.result?.result?.value;
     };
-    const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+    const sleep = (ms) => delay(ms, undefined, { signal: session.signal });
     await send("Runtime.enable");
     await send("Page.enable");
     const checkAccess = await restrictBrowser(socket, send, access.origin);
@@ -201,10 +173,8 @@ async function main() {
     const early = [SLOW, options.noWebgl ? NO_GL : "", options.preload ?? ""].filter(Boolean).join("\n");
     await send("Page.addScriptToEvaluateOnNewDocument", { source: early });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });
-    const load = new Promise((done) => {
-      loaded = done;
-      setTimeout(done, 10000);
-    });
+    const load = Promise.race([new Promise((done) => { loaded = done; }), sleep(10000)]);
+    load.catch(() => {});
     const navigation = await send("Page.navigate", { url: access.url });
     if (navigation.error) throw new Error(`Navigation failed: ${navigation.error.message}`);
     if (navigation.result?.errorText) throw new Error(`Navigation failed: ${navigation.result.errorText}`);
@@ -339,10 +309,11 @@ async function main() {
     }
     checkAccess();
     console.log(problems.length ? options.diagnostics ? problems.join("\n") : `browser warnings/errors: ${problems.length}` : "console: clean");
-    socket.close();
-    finish(failed ? 1 : 0);
+    process.exitCode = failed ? 1 : 0;
   } catch (error) {
     console.error(options.diagnostics ? error : "Drive failed; rerun with --diagnostics for browser details.");
-    finish(1);
+    process.exitCode = 1;
+  } finally {
+    await session.close();
   }
 }

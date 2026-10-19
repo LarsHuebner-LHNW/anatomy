@@ -14,6 +14,12 @@ Browser helpers print status and counts by default. `--diagnostics` also prints 
 
 Screenshots and exported figures contain your data. Asking a hosted assistant to inspect them can disclose that data even when rendering is local. Review sensitive material locally, and never include private prompts, figures or logs in public bug reports.
 
+Keep private sources and exports in the checkout's ignored `private/` directory. Do not put private work in tracked examples. Ignore rules do not protect already tracked files or replace filesystem permissions.
+
+Browser helpers clean up owned processes and temporary data on normal completion, failures, SIGINT and SIGTERM. They wait for the browser to stop before removing its profile and report cleanup failures. SIGKILL, a crash or power loss can still leave temporary files; inspect any reported leftovers locally.
+
+If a child cannot be stopped, cleanup reports its process and temporary location and retains its files rather than deleting data still in use.
+
 A security problem is anything in this repository that could let a page, a prompt or a file run code, read files or reach the network in a way the user did not ask for: in the kit, in the scripts, in the built example pages, or in instructions in `SKILL.md` and `references/` that would lead Claude to do something unsafe.
 
 ## Supported versions

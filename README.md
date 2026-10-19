@@ -60,6 +60,8 @@ For Antigravity, OpenCode, Codex, or MiniMax Code, target that agent: `-a antigr
 
 That's it. No API keys and nothing to `npm install`: the kit uses only Node's built-in modules.
 
+Keep private figure sources and exports in this checkout's ignored `private/` directory. In another project, use a directory covered by that project's ignore rules. Git ignores help prevent accidental commits; they do not restrict file access or protect material already tracked by Git. See [SECURITY.md](SECURITY.md) for browser and assistant privacy boundaries.
+
 ## Gallery
 
 <table>

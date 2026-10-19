@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { forwardSignals } from "./browser-session.mjs";
 
 const argv = process.argv.slice(2);
 if (!argv.length || argv.includes("--help") || argv.includes("-h")) {
@@ -28,4 +29,5 @@ const select = take("--select", null);
 const wait = Number(take("--wait", 1500));
 const actions = JSON.stringify([["wait", wait], ["lines", out, select, { tolerance }]]);
 const child = spawn(process.execPath, [join(dirname(fileURLToPath(import.meta.url)), "drive.mjs"), argv[0], actions, ...argv.slice(1)], { stdio: "inherit" });
+forwardSignals(child);
 child.on("exit", (code) => process.exit(code ?? 1));

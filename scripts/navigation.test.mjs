@@ -22,7 +22,7 @@ async function run(name, kind) {
       await new Promise((resolve) => server.close(resolve));
     }
     const args = [fileURLToPath(new URL(`${name}.mjs`, import.meta.url)), target, ...(name === "capture" ? ["--out", join(directory, "shot.png"), "--wait", "0"] : ["[]"])];
-    if (kind === "refused") args.push("--allow-origin", new URL(target).origin);
+    if (kind === "refused") args.push("--allow-origin", new URL(target).origin, "--diagnostics");
     try {
       return { code: 0, ...await execute(process.execPath, args, { timeout: 30000 }) };
     } catch (error) {

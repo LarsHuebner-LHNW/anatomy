@@ -1,10 +1,11 @@
-import { chromePort } from "./chrome-port.mjs";
-import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
+import { browserSession, forwardSignals } from "./browser-session.mjs";
+import { browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { setTimeout as delay } from "node:timers/promises";
 import { LINE_ENDS } from "./line-ends.mjs";
 
 function usage() {
@@ -62,54 +63,36 @@ async function browser(target, { width, height, scale, throttle, noWebgl, allowO
     process.exit(1);
   }
   const access = await browserTarget(target, allowOrigin);
-  const profile = mkdtempSync(join(tmpdir(), "turn-check-"));
-  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", ...accessFlags, "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
-  const port = await chromePort(chrome, profile);
-  const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
-  let id = 0;
-  const pending = new Map();
-  const problems = [];
-  socket.onmessage = (message) => {
-    const data = JSON.parse(message.data);
-    if (data.id && pending.has(data.id)) {
-      pending.get(data.id)(data);
-      pending.delete(data.id);
-    } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) problems.push(diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}` : data.params.type);
-    else if (data.method === "Runtime.exceptionThrown") problems.push(diagnostics ? `exception: ${data.params.exceptionDetails.exception?.description ?? data.params.exceptionDetails.text}`.slice(0, 400) : "exception");
-  };
-  await new Promise((done) => (socket.onopen = done));
-  const send = (method, params = {}) =>
-    new Promise((done) => {
-      const call = ++id;
-      pending.set(call, done);
-      socket.send(JSON.stringify({ id: call, method, params }));
-    });
-  const evaluate = async (expression) => {
-    const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-    if (result.result?.exceptionDetails) throw new Error(diagnostics ? JSON.stringify(result.result.exceptionDetails).slice(0, 800) : "Browser evaluation failed");
-    return result.result?.result?.value;
-  };
-  await send("Runtime.enable");
-  await send("Page.enable");
-  const checkAccess = await restrictBrowser(socket, send, access.origin);
-  const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind))&&!this.dataset.check)return null;return get.call(this,kind,...rest)}})();`;
-  if (noWebgl) await send("Page.addScriptToEvaluateOnNewDocument", { source: NO_GL });
-  await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 });
-  if (throttle > 1) await send("Emulation.setCPUThrottlingRate", { rate: throttle });
-  const navigation = await send("Page.navigate", { url: access.url });
-  if (navigation.error || navigation.result?.errorText) throw new Error("Navigation failed");
-  await new Promise((done) => setTimeout(done, 1500));
-  const close = () => {
-    access.close();
-    socket.close();
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
-  };
-  checkAccess();
-  return { send, evaluate, close, problems };
+  const session = await browserSession(binary, "turn-check-", access);
+  try {
+    const { socket, send, close } = session;
+    const problems = [];
+    socket.onmessage = (message) => {
+      const data = JSON.parse(message.data);
+      if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) problems.push(diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}` : data.params.type);
+      else if (data.method === "Runtime.exceptionThrown") problems.push(diagnostics ? `exception: ${data.params.exceptionDetails.exception?.description ?? data.params.exceptionDetails.text}`.slice(0, 400) : "exception");
+    };
+    const evaluate = async (expression) => {
+      const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+      if (result.result?.exceptionDetails) throw new Error(diagnostics ? JSON.stringify(result.result.exceptionDetails).slice(0, 800) : "Browser evaluation failed");
+      return result.result?.result?.value;
+    };
+    await send("Runtime.enable");
+    await send("Page.enable");
+    const checkAccess = await restrictBrowser(socket, send, access.origin);
+    const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind))&&!this.dataset.check)return null;return get.call(this,kind,...rest)}})();`;
+    if (noWebgl) await send("Page.addScriptToEvaluateOnNewDocument", { source: NO_GL });
+    await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 });
+    if (throttle > 1) await send("Emulation.setCPUThrottlingRate", { rate: throttle });
+    const navigation = await send("Page.navigate", { url: access.url });
+    if (navigation.error || navigation.result?.errorText) throw new Error("Navigation failed");
+    await delay(1500, undefined, { signal: session.signal });
+    checkAccess();
+    return { send, evaluate, close, problems };
+  } catch (error) {
+    await session.close();
+    throw error;
+  }
 }
 
 const HELPERS = String.raw`(() => {
@@ -657,7 +640,7 @@ async function main() {
     console.error(options.diagnostics ? error : "Turn check failed; rerun with --diagnostics for browser details.");
     failed++;
   } finally {
-    page.close();
+    await page.close();
   }
   console.log(failed ? `turn check failed: ${failed}` : "turn check passed");
   process.exit(failed ? 1 : 0);
@@ -665,6 +648,7 @@ async function main() {
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
   const child = spawn(process.execPath, ["--experimental-websocket", ...process.argv.slice(1)], { stdio: "inherit" });
+  forwardSignals(child);
   child.on("exit", (code) => process.exit(code ?? 1));
 } else {
   await main();

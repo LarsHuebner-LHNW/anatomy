@@ -54,7 +54,7 @@ export async function browserTarget(target, allowOrigin) {
   await new Promise((done, fail) => { server.once("error", fail); server.listen(0, "127.0.0.1", done); });
   origin = `http://127.0.0.1:${server.address().port}`;
   server.unref();
-  return { url: `${origin}/${encodeURIComponent(basename(file))}`, origin, close() { server.closeAllConnections(); server.close(); } };
+  return { url: `${origin}/${encodeURIComponent(basename(file))}`, origin, close() { server.closeAllConnections(); return new Promise((done, fail) => server.close((error) => error ? fail(error) : done())); } };
 }
 
 export async function restrictBrowser(socket, send, origin) {

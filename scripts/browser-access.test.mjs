@@ -41,7 +41,7 @@ test("local serving permits relative assets and rejects traversal and symlink es
     }
     assert.equal((await fetch(target.url)).headers.get("cache-control"), "no-store");
   } finally {
-    target?.close();
+    await target?.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
@@ -99,7 +99,7 @@ test("PDF rendering uses the same resource restrictions", async () => {
   try {
     const html = join(directory, "figure.html");
     await writeFile(html, `<!doctype html><style>@page{size:100mm 100mm;margin:5mm}</style><h1>Private figure</h1><img src="http://127.0.0.1:${sink.address().port}/image">`);
-    const script = `import { printPdf } from ${JSON.stringify(new URL("print.mjs", import.meta.url).href)}; console.log(JSON.stringify(printPdf(process.argv[1], process.argv[2])));`;
+    const script = `import { printPdf } from ${JSON.stringify(new URL("print.mjs", import.meta.url).href)}; console.log(JSON.stringify(await printPdf(process.argv[1], process.argv[2])));`;
     const pdf = join(directory, "figure.pdf");
     const { stdout } = await execute(process.execPath, ["--input-type=module", "-e", script, html, pdf], { timeout: 30000 });
     const result = JSON.parse(stdout);

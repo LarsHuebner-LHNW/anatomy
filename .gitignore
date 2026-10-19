@@ -9,6 +9,7 @@ audit.txt
 /capture.png
 .scratch/
 tmp/
+/private/
 examples/*/*-a4.html
 examples/*/*-a4.png
 examples/*/*-letter.html
