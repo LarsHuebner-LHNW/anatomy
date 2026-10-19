@@ -1,12 +1,14 @@
-import { chromePort } from "./chrome-port.mjs";
-import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
+import { browserSession, forwardSignals } from "./browser-session.mjs";
+import { browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 
 if (typeof WebSocket === "undefined" && !process.execArgv.includes("--experimental-websocket")) {
   const child = spawn(process.execPath, ["--experimental-websocket", ...process.argv.slice(1)], { stdio: "inherit" });
+  forwardSignals(child);
   child.on("exit", (code) => process.exit(code ?? 1));
 } else {
   await main();
@@ -126,64 +128,23 @@ async function main() {
     process.exit(1);
   }
   const access = await browserTarget(options.target, options.allowOrigin);
-  const profile = mkdtempSync(join(tmpdir(), "iso-capture-"));
-  const chrome = spawn(binary, [
-    "--headless=new",
-    "--remote-debugging-port=0",
-    `--user-data-dir=${profile}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--hide-scrollbars",
-    ...accessFlags,
-    "--enable-unsafe-swiftshader",
-    "--ignore-gpu-blocklist",
-    "about:blank",
-  ]);
-  const port = await chromePort(chrome, profile);
-  const finish = (code) => {
-    access.close();
-    chrome.kill("SIGKILL");
-    try {
-      rmSync(profile, { recursive: true, force: true });
-    } catch {}
-    process.exit(code);
-  };
+  const session = await browserSession(binary, "iso-capture-", access);
   try {
-    const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
-    const socket = new WebSocket(target.webSocketDebuggerUrl);
-    let id = 0;
-    const pending = new Map();
+    const { socket, send } = session;
     const problems = [];
     let loaded = () => {};
     socket.onmessage = (message) => {
       const data = JSON.parse(message.data);
       if (data.method === "Page.loadEventFired") loaded();
-      if (data.id && pending.has(data.id)) {
-        pending.get(data.id)(data);
-        pending.delete(data.id);
-      } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
+      if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
         problems.push(options.diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}` : data.params.type);
       } else if (data.method === "Runtime.exceptionThrown") {
         const detail = data.params.exceptionDetails;
         problems.push(options.diagnostics ? `exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600) : "exception");
       }
     };
-    await new Promise((done) => (socket.onopen = done));
-    const send = (method, params = {}) =>
-      new Promise((done, fail) => {
-        const call = ++id;
-        const timer = setTimeout(() => {
-          pending.delete(call);
-          fail(new Error(`Chrome did not answer ${method} within 60 s`));
-        }, 60000);
-        pending.set(call, (data) => {
-          clearTimeout(timer);
-          done(data);
-        });
-        socket.send(JSON.stringify({ id: call, method, params }));
-      });
     const evaluate = async (expression) => (await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result?.result?.value;
-    const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
+    const sleep = (ms) => delay(ms, undefined, { signal: session.signal });
     await send("Runtime.enable");
     await send("Page.enable");
     const checkAccess = await restrictBrowser(socket, send, access.origin);
@@ -192,10 +153,8 @@ async function main() {
     if (options.theme) features.push({ name: "prefers-color-scheme", value: options.theme });
     if (features.length) await send("Emulation.setEmulatedMedia", { features });
     await send("Emulation.setDeviceMetricsOverride", { width: options.width, height: options.height, deviceScaleFactor: options.scale, mobile: options.width < 600 });
-    const load = new Promise((done) => {
-      loaded = done;
-      setTimeout(done, 10000);
-    });
+    const load = Promise.race([new Promise((done) => { loaded = done; }), sleep(10000)]);
+    load.catch(() => {});
     const navigation = await send("Page.navigate", { url: access.url });
     if (navigation.error) throw new Error(`Navigation failed: ${navigation.error.message}`);
     if (navigation.result?.errorText) throw new Error(`Navigation failed: ${navigation.result.errorText}`);
@@ -270,10 +229,10 @@ async function main() {
       if (readouts.length) console.log(`readout over time: ${readouts.join(" · ")}`);
       console.log(problems.length ? problems.join("\n") : "console: clean");
     } else console.log(problems.length ? `browser warnings/errors: ${problems.length}` : "console: clean");
-    socket.close();
-    finish(0);
   } catch (error) {
     console.error(options.diagnostics ? error : "Capture failed; rerun with --diagnostics for browser details.");
-    finish(1);
+    process.exitCode = 1;
+  } finally {
+    await session.close();
   }
 }

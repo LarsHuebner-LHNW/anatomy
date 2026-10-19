@@ -1,9 +1,10 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, existsSync, mkdtempSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FORMATS, PAPER, pagesOf, sheetHtml } from "./print-sheet.mjs";
+import { forwardSignals } from "./browser-session.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DRIVE = join(HERE, "drive.mjs");
@@ -103,24 +104,39 @@ export function captureScript(spec) {
 })()`;
 }
 
-function drive(page, actions, { reduced, width, height, scale = 1, allowOrigin }) {
+async function drive(page, actions, { reduced, width, height, scale = 1, allowOrigin }) {
   const profile = mkdtempSync(join(tmpdir(), "iso-print-"));
-  const file = join(profile, "actions.json");
-  writeFileSync(file, JSON.stringify(actions));
-  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height), "--scale", String(scale), "--diagnostics"];
-  if (reduced) args.push("--reduced");
-  if (allowOrigin) args.push("--allow-origin", allowOrigin);
-  const log = join(profile, "out.txt");
-  const fd = openSync(log, "w");
-  const run = spawnSync(process.execPath, args, { stdio: ["ignore", fd, "pipe"], encoding: "utf8", maxBuffer: 1 << 26 });
-  closeSync(fd);
-  const stdout = readFileSync(log, "utf8");
-  rmSync(profile, { recursive: true, force: true });
-  if (run.status !== 0) throw new Error(`drive.mjs failed with exit status ${run.status ?? "unknown"}`);
-  return stdout
-    .split("\n")
-    .filter((line) => line.startsWith("eval: "))
-    .map((line) => JSON.parse(line.slice(6)));
+  let fd, child, removeSignals;
+  let stopped = true;
+  try {
+    const file = join(profile, "actions.json");
+    writeFileSync(file, JSON.stringify(actions));
+    const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height), "--scale", String(scale), "--diagnostics"];
+    if (reduced) args.push("--reduced");
+    if (allowOrigin) args.push("--allow-origin", allowOrigin);
+    const log = join(profile, "out.txt");
+    fd = openSync(log, "w");
+    child = spawn(process.execPath, args, { stdio: ["ignore", fd, "ignore"] });
+    stopped = !child.pid;
+    const status = await new Promise((done, fail) => {
+      removeSignals = forwardSignals(child, fail);
+      child.on("error", (error) => { if (!child.pid) fail(error); });
+      child.once("close", (code) => { stopped = true; done(code); });
+    });
+    const stdout = readFileSync(log, "utf8");
+    if (status !== 0) throw new Error(`drive.mjs failed with exit status ${status ?? "unknown"}`);
+    return stdout
+      .split("\n")
+      .filter((line) => line.startsWith("eval: "))
+      .map((line) => JSON.parse(line.slice(6)));
+  } finally {
+    removeSignals?.();
+    if (fd !== undefined) closeSync(fd);
+    if (stopped) {
+      try { rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
+      catch (error) { console.error(`Print cleanup failed; check ${profile}.`); throw error; }
+    } else console.error(`Print process ${child.pid} has not stopped; temporary files retained at ${profile}.`);
+  }
 }
 
 export async function capture(spec, pagePath) {
@@ -129,7 +145,7 @@ export async function capture(spec, pagePath) {
   const script = captureScript(spec);
   const actions = [["wait", spec.settle ?? 1200]];
   for (const [, view] of views) actions.push(...(view.actions ?? []), ["eval", script], ...(view.reset ?? []));
-  const results = drive(pagePath, actions, options).filter((result) => result && result.__print);
+  const results = (await drive(pagePath, actions, options)).filter((result) => result && result.__print);
   if (results.length !== views.length) throw new Error(`expected ${views.length} captures, got ${results.length}`);
   const out = { views: {}, css: "" };
   results.forEach((result, index) => {
@@ -141,39 +157,43 @@ export async function capture(spec, pagePath) {
   const rasters = views.filter(([, view]) => view.raster);
   if (rasters.length) {
     const dir = mkdtempSync(join(tmpdir(), "iso-print-shots-"));
-    const shots = [["wait", spec.settle ?? 1200]];
-    for (const [name, view] of views) {
-      shots.push(...(view.actions ?? []));
-      if (view.raster) {
-        const captured = out.views[name];
-        const region = view.raster.region ?? captured.vb;
-        const [vx, vy] = captured.vb;
-        const box = [(region[0] - vx) / captured.k + captured.offset[0], (region[1] - vy) / captured.k + captured.offset[1], region[2] / captured.k, region[3] / captured.k].map((n) => Math.round(n));
-        shots.push(["shot", join(dir, `${name}.png`), view.raster.selector ?? spec.rasterSelector ?? ".iso-stage", view.raster.scale ?? 2, box]);
-        out.views[name].raster = { region, file: join(dir, `${name}.png`) };
+    try {
+      const shots = [["wait", spec.settle ?? 1200]];
+      for (const [name, view] of views) {
+        shots.push(...(view.actions ?? []));
+        if (view.raster) {
+          const captured = out.views[name];
+          const region = view.raster.region ?? captured.vb;
+          const [vx, vy] = captured.vb;
+          const box = [(region[0] - vx) / captured.k + captured.offset[0], (region[1] - vy) / captured.k + captured.offset[1], region[2] / captured.k, region[3] / captured.k].map((n) => Math.round(n));
+          shots.push(["shot", join(dir, `${name}.png`), view.raster.selector ?? spec.rasterSelector ?? ".iso-stage", view.raster.scale ?? 2, box]);
+          out.views[name].raster = { region, file: join(dir, `${name}.png`) };
+        }
+        shots.push(...(view.reset ?? []));
       }
-      shots.push(...(view.reset ?? []));
+      await drive(pagePath, shots, options);
+      for (const [name] of rasters) {
+        const raster = out.views[name].raster;
+        if (!existsSync(raster.file)) throw new Error(`raster shot for ${name} was not written`);
+        raster.href = `data:image/png;base64,${readFileSync(raster.file).toString("base64")}`;
+        delete raster.file;
+      }
+    } finally {
+      try { rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 }); }
+      catch (error) { console.error(`Print cleanup failed; check ${dir}.`); throw error; }
     }
-    drive(pagePath, shots, options);
-    for (const [name] of rasters) {
-      const raster = out.views[name].raster;
-      if (!existsSync(raster.file)) throw new Error(`raster shot for ${name} was not written`);
-      raster.href = `data:image/png;base64,${readFileSync(raster.file).toString("base64")}`;
-      delete raster.file;
-    }
-    rmSync(dir, { recursive: true, force: true });
   }
   return out;
 }
 
-export function printPdf(htmlFile, pdfFile, { png, paper, pages: expected = 1 } = {}) {
+export async function printPdf(htmlFile, pdfFile, { png, paper, pages: expected = 1 } = {}) {
   if (existsSync(pdfFile)) rmSync(pdfFile);
   const width = paper?.px[0] ?? 1200;
   const height = (paper?.px[1] ?? 1200) * expected;
   const actions = [];
   if (png) actions.push(["eval", "document.documentElement.classList.add('ps-bare'); true"], ["shot", png, "html", 1, [0, 0, width, height]]);
   actions.push(["pdf", pdfFile]);
-  drive(htmlFile, actions, { reduced: true, width, height, scale: png ? 2 : 1 });
+  await drive(htmlFile, actions, { reduced: true, width, height, scale: png ? 2 : 1 });
   if (!existsSync(pdfFile) || !statSync(pdfFile).size) throw new Error(`Chrome did not write ${pdfFile}`);
   const pages = (readFileSync(pdfFile, "latin1").match(/\/Type\s*\/Page(?![s\w])/g) ?? []).length;
   return { pages, bytes: statSync(pdfFile).size };
@@ -217,7 +237,7 @@ async function main() {
     const pdfFile = join(dir, `${name}.pdf`);
     const png = options.png ? join(dir, `${name}.png`) : null;
     const expected = pagesOf(format, spec);
-    const { pages, bytes } = printPdf(htmlFile, pdfFile, { png, paper, pages: expected });
+    const { pages, bytes } = await printPdf(htmlFile, pdfFile, { png, paper, pages: expected });
     console.log(`wrote ${name}.html (${(html.length / 1024).toFixed(0)} KB) and ${name}.pdf (${(bytes / 1024).toFixed(0)} KB, ${pages} page${pages === 1 ? "" : "s"})${png ? ` and ${name}.png` : ""}`);
     if (pages !== expected) {
       console.error(`${format} should print on ${expected} page${expected === 1 ? "" : "s"} but runs to ${pages}; shorten the text or the steps until it fits`);
@@ -227,4 +247,7 @@ async function main() {
   if (failed) process.exit(1);
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { await main(); }
+  catch (error) { console.error(error.message); process.exitCode ||= 1; }
+}

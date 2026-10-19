@@ -47,7 +47,7 @@ async function capture(mode, interaction, timed = false, zoom = false) {
     const page = join(directory, "figure.html"), output = join(directory, "capture.png");
     const change = mode === "resize" ? 'plate.style.width="180px";plate.style.height="120px";' : mode === "move" ? 'plate.style.transform="translate(200px,120px)";' : "";
     await writeFile(page, `<!doctype html><style>body{margin:20px;background:white}.iso-plate{position:relative;width:100px;height:80px;background:#ff0000}[data-readout]{position:absolute;left:0;top:-18px;white-space:nowrap}</style><div class="iso-plate" tabindex="0"><span data-readout></span></div><script>const plate=document.querySelector('.iso-plate');function report(){const r=plate.getBoundingClientRect();plate.querySelector('[data-readout]').textContent='native bounds '+r.width+'x'+r.height+' at '+r.left+','+r.top}function change(){${change}report()}report();plate.addEventListener(${JSON.stringify(interaction === "hover" ? "mouseenter" : "keydown")},event=>{event.preventDefault();${timed ? "setTimeout(change,3000)" : "change()"}},{once:true});</script>`);
-    const args = ["scripts/capture.mjs", page, "--out", output, "--wait", "0", "--scale", "1"];
+    const args = ["scripts/capture.mjs", page, "--out", output, "--wait", "0", "--scale", "1", "--diagnostics"];
     if (interaction === "hover") args.push("--hover", "0.5,0.5");
     if (interaction === "key") args.push("--key", "ArrowRight");
     if (timed) args.push("--times", "2500");

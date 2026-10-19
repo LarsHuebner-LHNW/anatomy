@@ -12,6 +12,8 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Browser helpers stop owned processes before removing profiles, handle interruption and connection failures, and clean temporary print data on errors. `printPdf` is now asynchronous; callers must await it.
+- Added an ignored `private/` directory for local sources and exports.
 - Browser helpers omit private page content from normal command output; `--diagnostics` opts into detailed output.
 - Replaced broad sandbox-relaxation advice with approval of individual browser checks.
 - Browser checks and PDF export serve local files from a bounded loopback directory and restrict page requests to that origin. Development servers require an explicit loopback origin.
