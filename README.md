@@ -183,7 +183,17 @@ Type `/anatomy` (in Codex, `$anatomy`) and say what the figure should explain:
 /anatomy explain how a token bucket rate limiter works, interactive
 ```
 
-You don't have to name the skill. Claude also loads it when you ask for an isometric illustration, an explanatory figure for docs, a blog post or a landing page, or an interactive explainer. Antigravity, OpenCode, Codex and MiniMax Code do the same.
+You don't have to name the skill. An assistant can select Anatomy when a physical mechanism, cutaway, exploded view or interactive apparatus illustration fits the requested result. Explicitly requesting Anatomy for a figure selects it, including physical analogies for abstract concepts. Generic requests for a diagram, an interactive explainer or a polished figure do not select it on their own. Selection is made by the host assistant; these instructions guide it rather than enforcing isolation between installed tools.
+
+| Request | Preferred approach |
+|---|---|
+| Explain a vacuum valve with an interactive cutaway | Anatomy |
+| Illustrate the components of an experimental apparatus | Anatomy, using supplied references |
+| Draw a data-processing workflow | Mermaid, D2 or Draw.io |
+| Plot transmission against beam energy | Scientific visualization |
+| Create a dimensioned part for manufacturing | CAD |
+
+Anatomy applies only to the illustration it was selected for. It respects chosen tools and output formats and does not configure or take precedence over other skills, MCPs or plugins.
 
 <details>
 <summary><b>More prompts</b>, from the skill's <a href="evals/evals.json">evals</a></summary>
