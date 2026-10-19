@@ -23,7 +23,7 @@ for (const [name, attributes, x, y, rooted, transform = ""] of [
     await writeFile(file, `<!doctype html><div class="iso-plate"><svg width="360" height="300" viewBox="0 0 360 300"><g transform="${transform}"><rect id="outline" x="0" y="0" ${attributes} fill="none" stroke="black"/><path class="iso-line" data-free="start" fill="none" stroke="black" d="M${x} -20 L${x} ${y}"/></g></svg></div>`);
     const actions = JSON.stringify([["eval", `document.querySelector('#outline').isPointInStroke(new DOMPoint(${x},${y}))`], ["lines"]]);
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions], { timeout: 30000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions, "--diagnostics"], { timeout: 30000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     assert.match(result.stdout, new RegExp(`eval: ${rooted}`));
     assert.equal(result.code, rooted ? 0 : 1, result.stderr);

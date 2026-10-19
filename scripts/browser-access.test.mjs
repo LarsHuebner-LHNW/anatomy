@@ -75,13 +75,13 @@ new Promise(done=>{addEventListener('securitypolicyviolation',e=>{if(e.violatedD
   try {
     const origin = `http://127.0.0.1:${server.address().port}`;
     const actions = [["eval", "results.then(r=>[window.assetLoaded,...r])"], ["eval", `location.href='${denied}/navigation'`], ["wait", 300]];
-    const result = await execute(process.execPath, [drive, `${origin}/`, JSON.stringify(actions), "--allow-origin", origin], { timeout: 30000 });
+    const result = await execute(process.execPath, [drive, `${origin}/`, JSON.stringify(actions), "--allow-origin", origin, "--diagnostics"], { timeout: 30000 });
     assert.match(result.stdout, /eval: \[true,true,true,true,true,true,true,true\]/);
     assert.equal(received, 0);
     assert.equal(upgrades, 0);
     await writeFile(join(directory, "asset.js"), "window.assetLoaded=true");
     await writeFile(join(directory, "figure.html"), html.replace("fetch('/redirect').then(()=>false,()=>true)", "Promise.resolve(true)"));
-    const local = await execute(process.execPath, [drive, join(directory, "figure.html"), JSON.stringify([["eval", "results.then(r=>[window.assetLoaded,...r])"]])], { timeout: 30000 });
+    const local = await execute(process.execPath, [drive, join(directory, "figure.html"), JSON.stringify([["eval", "results.then(r=>[window.assetLoaded,...r])"]]), "--diagnostics"], { timeout: 30000 });
     assert.match(local.stdout, /eval: \[true,true,true,true,true,true,true,true\]/);
     assert.equal(received, 0);
   } finally {

@@ -33,12 +33,13 @@ function usage() {
   --reduced           emulate prefers-reduced-motion: reduce
   --theme <dark|light>  emulate prefers-color-scheme
   --allow-origin <url>  explicitly allow this exact loopback development-server origin
+  --diagnostics         print page readouts and browser error details
 
-Prints the clip box, console errors, uncaught exceptions and whether the page scrolls sideways.`);
+Prints the clip box and whether the page scrolls sideways. Browser content requires --diagnostics.`);
 }
 
 function parse(argv) {
-  const options = { width: 1440, height: 1000, scale: 2, wait: 2500, zoomScale: 4, times: [] };
+  const options = { width: 1440, height: 1000, scale: 2, wait: 2500, zoomScale: 4, times: [], diagnostics: false };
   const rest = [];
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
@@ -57,6 +58,7 @@ function parse(argv) {
     else if (arg === "--reduced") options.reduced = true;
     else if (arg === "--theme") options.theme = next();
     else if (arg === "--allow-origin") options.allowOrigin = next();
+    else if (arg === "--diagnostics") options.diagnostics = true;
     else if (arg === "--help" || arg === "-h") options.help = true;
     else rest.push(arg);
   }
@@ -160,10 +162,10 @@ async function main() {
         pending.get(data.id)(data);
         pending.delete(data.id);
       } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
-        problems.push(`console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}`);
+        problems.push(options.diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}` : data.params.type);
       } else if (data.method === "Runtime.exceptionThrown") {
         const detail = data.params.exceptionDetails;
-        problems.push(`exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600));
+        problems.push(options.diagnostics ? `exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600) : "exception");
       }
     };
     await new Promise((done) => (socket.onopen = done));
@@ -256,19 +258,22 @@ async function main() {
       box = await boxOf();
       const next = clipOf();
       await shoot(out.replace(/\.png$/, `-${delay}.png`), next.clip, next.scale);
-      readouts.push(`+${delay}ms "${await readoutOf()}"`);
+      if (options.diagnostics) readouts.push(`+${delay}ms "${await readoutOf()}"`);
     }
     const sideways = await evaluate(`document.documentElement.scrollWidth > innerWidth + 1`);
-    const readout = await readoutOf();
+    const readout = options.diagnostics ? await readoutOf() : "";
     checkAccess();
     console.log(`saved ${out}`);
-    console.log(`clip ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)} · readout "${readout}" · scrolls sideways: ${sideways ? "YES" : "no"}`);
-    if (readouts.length) console.log(`readout over time: ${readouts.join(" · ")}`);
-    console.log(problems.length ? problems.join("\n") : "console: clean");
+    console.log(`clip ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.w)}x${Math.round(box.h)} · scrolls sideways: ${sideways ? "YES" : "no"}`);
+    if (options.diagnostics) {
+      console.log(`readout "${readout}"`);
+      if (readouts.length) console.log(`readout over time: ${readouts.join(" · ")}`);
+      console.log(problems.length ? problems.join("\n") : "console: clean");
+    } else console.log(problems.length ? `browser warnings/errors: ${problems.length}` : "console: clean");
     socket.close();
     finish(0);
   } catch (error) {
-    console.error(error);
+    console.error(options.diagnostics ? error : "Capture failed; rerun with --diagnostics for browser details.");
     finish(1);
   }
 }

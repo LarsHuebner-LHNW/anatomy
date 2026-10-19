@@ -1,5 +1,7 @@
 # Verify
 
+Checks print status and counts by default. Add `--diagnostics` only when page text, evaluation results and detailed errors may appear in the assistant's output or logs. Screenshots contain the figure's data; review private figures locally unless disclosure to the assistant is approved.
+
 Look at the figure the way a demanding reviewer would, before anyone else does. Rendering it is cheap, and guessing is expensive.
 
 ## Capture
@@ -47,7 +49,7 @@ Options are `--width` (1440), `--height` (1100), `--scale` (1), `--reduced`, `--
 | `["key", key, sel?, code?]` | Focuses `sel` (default `[tabindex="0"]`) and presses a key: `"i"`, `"Escape"`, `"ArrowRight"`, `" "`, `"7"`. Digits send `DigitN`, letters `KeyX` and punctuation its proper code (`Space`, `Minus`, `Comma`…). Pass `code` for keys that share a name: `["key", "Shift", null, "ShiftRight"]`, `["key", "Enter", null, "NumpadEnter"]`. |
 | `["slow", factor]` | Runs the page's `requestAnimationFrame` timestamps and `performance.now` at `factor` × real time: `["slow", 0.05]` is 20× slow motion, so a sheet catches a 100 ms event in many frames. `["slow", 1]` restores real time. |
 | `["until", js, timeoutMs?]` | Polls a JS expression every 25 ms until it is truthy (default 10 s), and prints a line if it times out. |
-| `["eval", js]` | Runs JS in the page and prints the result. Promises are awaited. |
+| `["eval", js]` | Runs JS in the page. Promises are awaited; `--diagnostics` prints the result. |
 | `["shot", out, sel?, scale?, [x,y,w,h]?]` | Screenshots an element, or a region of it in CSS px. |
 | `["pdf", out]` | Prints a PDF using the page's CSS paper size, through the same local access controls. |
 | `["sheet", out, every, count, sel?, scale?, [x,y,w,h]?, columns?]` | Takes `count` frames `every` ms apart and tiles them into one numbered PNG. |

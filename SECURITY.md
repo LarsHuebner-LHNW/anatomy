@@ -10,6 +10,10 @@ To check a development server, use a loopback IP and pass its exact origin with 
 
 Build scripts, print specifications and drive actions are executable code, not safe document formats. Use only trusted inputs. The browser restrictions do not constrain Node build scripts or the assistant running them.
 
+Browser helpers print status and counts by default. `--diagnostics` also prints page readouts, evaluation results, console messages and detailed errors; use it only when those contents may be disclosed to the assistant or log system receiving command output. Print export extracts figure data through a private child-process pipe and does not echo it on failure.
+
+Screenshots and exported figures contain your data. Asking a hosted assistant to inspect them can disclose that data even when rendering is local. Review sensitive material locally, and never include private prompts, figures or logs in public bug reports.
+
 A security problem is anything in this repository that could let a page, a prompt or a file run code, read files or reach the network in a way the user did not ask for: in the kit, in the scripts, in the built example pages, or in instructions in `SKILL.md` and `references/` that would lead Claude to do something unsafe.
 
 ## Supported versions

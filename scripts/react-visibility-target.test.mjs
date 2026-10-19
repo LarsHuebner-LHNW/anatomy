@@ -19,7 +19,7 @@ for(const mode of ['swap','late','healthy','moved','strict'])flushSync(()=>creat
   await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: "jsx" }, bundle: true, outfile: join(directory,"fixture.js"), platform: "browser", nodePaths, alias });
   const page = join(directory,"figure.html");
   await writeFile(page,'<!doctype html><div class="iso-plate"><div id="swap"></div><div id="late"></div><div id="healthy"></div><div id="moved"></div><div id="strict"></div></div><script src="fixture.js"></script>');
-  const result = await promisify(execFile)(process.execPath,["scripts/drive.mjs",page,JSON.stringify([["eval","window.visibilityObserved"]])],{timeout:30000});
+  const result = await promisify(execFile)(process.execPath,["scripts/drive.mjs",page,JSON.stringify([["eval","window.visibilityObserved"]]),"--diagnostics"],{timeout:30000});
   const payload = result.stdout.match(/eval: (.*)/);
   assert.ok(payload, result.stdout);
   observed = JSON.parse(payload[1]);

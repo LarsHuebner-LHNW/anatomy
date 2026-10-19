@@ -12,7 +12,7 @@ async function run(kind, args) {
   try {
     const file = join(directory, "figure.html");
     await writeFile(file, `<!doctype html><div class="iso-plate" style="width:400px;height:180px"><button id="button" type="button" tabindex="0" onclick="window.clicked=(window.clicked||0)+1;document.querySelector('[data-readout]').textContent='activated'">Activate</button><form onsubmit="event.preventDefault();window.submitted=(window.submitted||0)+1"><input id="field" tabindex="0"></form><input id="range" type="range" value="5" min="0" max="10"><span data-readout>waiting</span></div>`);
-    return await execute(process.execPath, ["scripts/" + kind + ".mjs", file, ...(kind === "capture" ? ["--out", join(directory, "shot.png"), "--wait", "0", "--key", args] : [JSON.stringify(args)])], { timeout: 30000 });
+    return await execute(process.execPath, ["scripts/" + kind + ".mjs", file, ...(kind === "capture" ? ["--out", join(directory, "shot.png"), "--wait", "0", "--key", args, "--diagnostics"] : [JSON.stringify(args), "--diagnostics"])], { timeout: 30000 });
   } finally { await rm(directory, { recursive: true, force: true }); }
 }
 for (const code of [undefined, "NumpadEnter"])

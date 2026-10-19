@@ -25,7 +25,7 @@ try {
   const page = join(directory, "figure.html");
   await writeFile(page, `<!doctype html><div class="iso-plate"><svg width="400" height="400">${fixtures.map(([,markup],i)=>`<g id="fixture-${i}">${markup}</g>`).join("")}</svg></div>`);
   const expression = `Array.from({length:${fixtures.length}},(_,i)=>{const group=document.querySelector('#fixture-'+i),shape=group.querySelector('rect,circle,ellipse,line'),matrix=shape.getCTM(),points=[];if(shape.tagName==='rect'){const b=shape.getBBox();for(const [x,y] of [[b.x,b.y],[b.x+b.width,b.y],[b.x+b.width,b.y+b.height],[b.x,b.y+b.height]])points.push(new DOMPoint(x,y).matrixTransform(matrix));}else{const length=shape.getTotalLength();for(let j=0;j<=4096;j++)points.push(shape.getPointAtLength(length*j/4096).matrixTransform(matrix));}const b=group.getBBox();return{geometry:[Math.min(...points.map(p=>p.x)),Math.min(...points.map(p=>p.y)),Math.max(...points.map(p=>p.x)),Math.max(...points.map(p=>p.y))],groupBox:[b.x,b.y,b.x+b.width,b.y+b.height]}})`;
-  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", page, JSON.stringify([["eval",expression]])], { timeout: 30000 });
+  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", page, JSON.stringify([["eval",expression]]), "--diagnostics"], { timeout: 30000 });
   const observations = JSON.parse(result.stdout.match(/eval: (.*)/)[1]);
   console.log("native SVG group bounds:", JSON.stringify(observations.map(v=>v.groupBox)));
   native = observations.map(v=>v.geometry);

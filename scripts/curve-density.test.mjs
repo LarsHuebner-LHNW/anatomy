@@ -17,7 +17,7 @@ for (const [name, path, x, y] of [
     await writeFile(file, `<!doctype html><div class="iso-plate"><svg width="520" height="440" viewBox="0 0 520 440"><path id="curve" fill="none" stroke="black" d="${path}"/><path class="iso-line" data-free="start" fill="none" stroke="black" d="M${x} 10L${x} ${y}"/></svg></div>`);
     const actions = JSON.stringify([["eval", `document.querySelector('#curve').isPointInStroke(new DOMPoint(${x},${y}))`], ["lines"]]);
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions], { timeout: 30000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions, "--diagnostics"], { timeout: 30000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     assert.match(result.stdout, /eval: true/);
     assert.match(result.stdout, /line ends: (?:0|1) of 1/);
@@ -37,7 +37,7 @@ for (const [name, path, x, y, transform, attached] of [
     await writeFile(file, `<!doctype html><div class="iso-plate"><svg width="1560" height="440" viewBox="0 0 1560 440"><g transform="${transform}"><path id="curve" fill="none" stroke="black" d="${path}"/><path class="iso-line" data-free="start" fill="none" stroke="black" d="M${x} 10L${x} ${y}"/></g></svg></div>`);
     const actions = JSON.stringify([["eval", `document.querySelector('#curve').isPointInStroke(new DOMPoint(${x},${y}))`], ["lines"]]);
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions], { timeout: 30000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions, "--diagnostics"], { timeout: 30000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     assert.match(result.stdout, new RegExp(`eval: ${attached}`));
     assert.equal(result.code, attached ? 0 : 1, result.stdout);
@@ -51,7 +51,7 @@ test("native audit refuses curves whose approximation budget cannot prove the bo
     const file = join(directory, "figure.html");
     await writeFile(file, '<!doctype html><div class="iso-plate"><svg width="520" height="440"><path fill="none" stroke="black" d="M20 400C1000000000 0 0 1000000000 480 400"/></svg></div>');
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, '[["lines"]]'], { timeout: 30000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, '[["lines"]]', "--diagnostics"], { timeout: 30000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     assert.equal(result.code, 1);
     assert.match(result.stderr, /Curve audit could not establish its screen-space sampling bound/);

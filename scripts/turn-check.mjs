@@ -16,6 +16,7 @@ function usage() {
   node turn-check.mjs page.html [--order] [--pops] [--lines] [--perf] [--step 1] [--states states.json]
                                 [--width 1440] [--height 1100] [--scale 2] [--throttle 1] [--no-webgl] [--out dir]
                                 [--allow-origin http://127.0.0.1:port]
+      --diagnostics   include layer names, theme and detailed browser findings
       --order   needs a --verify build: the recorded shapes in a WebGL z-buffer (part-ID colours, 2x) against the live
                 layers' fills in DOM order. Fails on any live pair with 4 or more interior pixels. Static × live mismatches
                 are listed (the layer proofs and the orbit audit own them). Control: each live layer's order reversed at
@@ -54,7 +55,7 @@ function chromePath() {
   return candidates.find((path) => existsSync(path));
 }
 
-async function browser(target, { width, height, scale, throttle, noWebgl, allowOrigin }) {
+async function browser(target, { width, height, scale, throttle, noWebgl, allowOrigin, diagnostics }) {
   const binary = chromePath();
   if (!binary) {
     console.error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
@@ -74,8 +75,8 @@ async function browser(target, { width, height, scale, throttle, noWebgl, allowO
     if (data.id && pending.has(data.id)) {
       pending.get(data.id)(data);
       pending.delete(data.id);
-    } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) problems.push(`console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}`);
-    else if (data.method === "Runtime.exceptionThrown") problems.push(`exception: ${data.params.exceptionDetails.exception?.description ?? data.params.exceptionDetails.text}`.slice(0, 400));
+    } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) problems.push(diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 400)}` : data.params.type);
+    else if (data.method === "Runtime.exceptionThrown") problems.push(diagnostics ? `exception: ${data.params.exceptionDetails.exception?.description ?? data.params.exceptionDetails.text}`.slice(0, 400) : "exception");
   };
   await new Promise((done) => (socket.onopen = done));
   const send = (method, params = {}) =>
@@ -86,7 +87,7 @@ async function browser(target, { width, height, scale, throttle, noWebgl, allowO
     });
   const evaluate = async (expression) => {
     const result = await send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
-    if (result.result?.exceptionDetails) throw new Error(JSON.stringify(result.result.exceptionDetails).slice(0, 800));
+    if (result.result?.exceptionDetails) throw new Error(diagnostics ? JSON.stringify(result.result.exceptionDetails).slice(0, 800) : "Browser evaluation failed");
     return result.result?.result?.value;
   };
   await send("Runtime.enable");
@@ -522,7 +523,7 @@ async function main() {
     console.log(failed ? `fidelity failed: ${failed}` : "fidelity passed");
     process.exit(failed ? 1 : 0);
   }
-  const options = { width: Number(value("--width", 1440)), height: Number(value("--height", 1100)), scale: Number(value("--scale", argv.includes("--perf") ? (Number(value("--width", 1440)) < 600 ? 3 : 2) : 1)), throttle: Number(value("--throttle", 1)), noWebgl: argv.includes("--no-webgl"), allowOrigin: value("--allow-origin", undefined) };
+  const options = { width: Number(value("--width", 1440)), height: Number(value("--height", 1100)), scale: Number(value("--scale", argv.includes("--perf") ? (Number(value("--width", 1440)) < 600 ? 3 : 2) : 1)), throttle: Number(value("--throttle", 1)), noWebgl: argv.includes("--no-webgl"), allowOrigin: value("--allow-origin", undefined), diagnostics: argv.includes("--diagnostics") };
   const step = Number(value("--step", 1));
   if (!Number.isFinite(step) || step <= 0 || step > 360) throw new Error("--step must be a finite number greater than 0 and at most 360 degrees");
   const fine = Number(value("--fine", 0.1));
@@ -535,7 +536,7 @@ async function main() {
   const labelOf = (state, index) => (typeof state === "number" ? `${state.toFixed(3)}°` : `state ${index}`);
   try {
     const info = await page.evaluate(HELPERS);
-    console.log(`page ${info.W}×${info.H} · live layers ${info.layers.filter(Boolean).join(", ")} · theme ${info.theme}`);
+    console.log(options.diagnostics ? `page ${info.W}×${info.H} · live layers ${info.layers.filter(Boolean).join(", ")} · theme ${info.theme}` : `page ${info.W}×${info.H} · live layers ${info.layers.filter(Boolean).length}`);
     await page.evaluate(`window.__isoTurn.set(0) && 0`);
     const sweep = states ?? Array.from({ length: Math.round(360 / step) }, (_, i) => i * step);
     if (argv.includes("--order")) {
@@ -554,7 +555,7 @@ async function main() {
         console.log(`order control (each live layer reversed at 0, 90, 180, 270): least ${control} mismatched px ${control >= 1000 ? "· fails as it should" : "· did not fail: the check is broken"}`);
         if (control < 1000) failed++;
         const probe = value("--part", null);
-        if (probe) for (const state of sweep.slice(0, 12)) console.log(`  ${probe} at ${JSON.stringify(state)}: ${JSON.stringify(await page.evaluate(`window.__tc.order.footprint(${JSON.stringify(state)}, ${JSON.stringify(probe)})`))}`);
+        if (options.diagnostics && probe) for (const state of sweep.slice(0, 12)) console.log(`  ${probe} at ${JSON.stringify(state)}: ${JSON.stringify(await page.evaluate(`window.__tc.order.footprint(${JSON.stringify(state)}, ${JSON.stringify(probe)})`))}`);
         let bad = 0;
         const layerNotes = new Map();
         let worst = 0;
@@ -565,12 +566,12 @@ async function main() {
           worst = Math.max(worst, ...r.live.map((p) => p.px), 0);
           if (errors.length) {
             bad++;
-            if (bad <= 30) console.log(`  ${labelOf(state, index)}: ${errors.map((e) => `${e.painter} over ${e.truth} ${e.px} px`).join(" · ")}${r.stats.forced ? ` · forced ${r.stats.forced}` : ""}`);
+            if (options.diagnostics && bad <= 30) console.log(`  ${labelOf(state, index)}: ${errors.map((e) => `${e.painter} over ${e.truth} ${e.px} px`).join(" · ")}${r.stats.forced ? ` · forced ${r.stats.forced}` : ""}`);
           }
           for (const l of r.layers) if (l.px >= 16) layerNotes.set(`${l.painter} / ${l.truth}`, Math.max(layerNotes.get(`${l.painter} / ${l.truth}`) ?? 0, l.px));
         }
         console.log(`order: ${sweep.length} states · ${bad} with a live pair drawn out of order (4+ interior px at 2x) · worst live pair ${worst} px`);
-        if (layerNotes.size) console.log(`  static × live (recorded static shapes are stand-ins; the layer proofs own these): ${[...layerNotes].slice(0, 8).map(([k, v]) => `${k} ${v}px`).join(" · ")}`);
+        if (options.diagnostics && layerNotes.size) console.log(`  static × live (recorded static shapes are stand-ins; the layer proofs own these): ${[...layerNotes].slice(0, 8).map(([k, v]) => `${k} ${v}px`).join(" · ")}`);
         if (bad) failed++;
       }
     }
@@ -580,7 +581,7 @@ async function main() {
       const plantPart = await page.evaluate(`(() => { const svgs = [...document.querySelectorAll("svg[data-live]")]; const parts = [...svgs[svgs.length - 1].querySelectorAll("[data-p]")]; let best = null; let area = 0; for (const el of parts) { const b = el.getBBox(); if (b.width * b.height > area) { area = b.width * b.height; best = el; } } return best ? Number(best.dataset.p) : null; })()`);
       const plantAt = typeof sweep[0] === "number" ? 37 : sweep[0];
       const control = await page.evaluate(`window.__tc.pops.first(${JSON.stringify(plantAt)}, ${JSON.stringify(typeof plantAt === "number" ? plantAt + 0.02 : plantAt)}, ${plantPart})`);
-      console.log(`pops control (part ${plantPart} hidden for one frame): ${control.n ? `${control.n} px flagged · fails as it should` : "nothing flagged: the check is broken"}`);
+      console.log(`pops control: ${control.n ? `${control.n} px flagged · fails as it should` : "nothing flagged: the check is broken"}`);
       if (!control.n) failed++;
       let firstBad = 0;
       const firstStates = states ?? Array.from({ length: Math.round(360 / step) }, (_, i) => i * step);
@@ -591,7 +592,7 @@ async function main() {
         const r = await page.evaluate(`window.__tc.pops.first(${JSON.stringify(a)}, ${JSON.stringify(b)})`);
         if (r.n) {
           firstBad++;
-          if (firstBad <= 20) console.log(`  first difference ${labelOf(a, index)}: ${r.n} px survive two erosions in ${r.box.join(",")}`);
+          if (options.diagnostics && firstBad <= 20) console.log(`  first difference ${labelOf(a, index)}: ${r.n} px survive two erosions in ${r.box.join(",")}`);
         }
       }
       console.log(`pops, first difference: ${firstStates.length} steps · ${firstBad} with a surviving region`);
@@ -603,10 +604,10 @@ async function main() {
           const r = await page.evaluate(`window.__tc.pops.second(${x.toFixed(4)}, ${(x + fine).toFixed(4)}, ${(x + 2 * fine).toFixed(4)})`);
           if (r.n >= 6) {
             cores++;
-            if (cores <= 20) console.log(`  second difference at ${(x + fine).toFixed(2)}°: core of ${r.n} px in ${r.box.join(",")}`);
+            if (options.diagnostics && cores <= 20) console.log(`  second difference at ${(x + fine).toFixed(2)}°: core of ${r.n} px in ${r.box.join(",")}`);
           } else if (r.n) small.push(`${(x + fine).toFixed(2)}° ${r.n} px in ${r.box.join(",")}`);
         }
-        console.log(`pops, second difference at ${fine}° over a full turn: ${cores} cores of 6+ px · ${small.length} small cores to read${small.length ? `: ${small.slice(0, 12).join(" · ")}` : ""}`);
+        console.log(`pops, second difference at ${fine}° over a full turn: ${cores} cores of 6+ px · ${small.length} small cores${options.diagnostics && small.length ? ` to read: ${small.slice(0, 12).join(" · ")}` : ""}`);
         const dumped = out ? await page.evaluate("window.__tcDumped && typeof window.__tcDumped === 'object' ? window.__tcDumped : null") : null;
         if (dumped) {
           mkdirSync(out, { recursive: true });
@@ -619,18 +620,18 @@ async function main() {
     if (argv.includes("--lines")) {
       const angles = Array.from({ length: 24 }, (_, i) => i * 15);
       const planted = await page.evaluate(`(() => { window.__isoTurn.set(0); const part = document.querySelector("svg[data-live] [data-p]"); const el = document.createElementNS("http://www.w3.org/2000/svg", "path"); el.setAttribute("class", "iso-line"); el.setAttribute("data-tone", "lo"); el.setAttribute("d", "M5 5L25 9"); el.setAttribute("data-plant", ""); part.appendChild(el); const r = (${LINE_ENDS})({ select: null, show: false }); el.remove(); return r ? r.problems.length : -1; })()`);
-      console.log(`lines control (a planted floating line): ${planted > 0 ? "fails as it should" : "nothing flagged: the check is broken"}`);
-      if (!(planted > 0)) failed++;
-      let bad = 0;
-      for (const angle of angles) {
-        const r = await page.evaluate(`(() => { window.__isoTurn.set(${angle}); const r = (${LINE_ENDS})({ select: null, show: false }); return r ? { n: r.problems.length, list: r.problems.slice(0, 4).map((p) => p.what + " " + p.end + " " + p.gap.toFixed(2) + " px at " + p.at.join(",")) } : null; })()`);
-        if (r && r.n) {
-          bad += r.n;
-          console.log(`  ${angle}°: ${r.n} floating ends: ${r.list.join(" · ")}`);
+        console.log(`lines control: ${planted > 0 ? "fails as it should" : "nothing flagged: the check is broken"}`);
+        if (!(planted > 0)) failed++;
+        let bad = 0;
+        for (const angle of angles) {
+          const r = await page.evaluate(`(() => { window.__isoTurn.set(${angle}); const r = (${LINE_ENDS})({ select: null, show: false }); return r ? { n: r.problems.length, list: r.problems.slice(0, 4).map((p) => p.what + " " + p.end + " " + p.gap.toFixed(2) + " px at " + p.at.join(",")) } : null; })()`);
+          if (r && r.n) {
+            bad += r.n;
+            if (options.diagnostics && r.n) console.log(`  ${angle}°: ${r.n} floating ends: ${r.list.join(" · ")}`);
+          }
         }
-      }
-      console.log(`lines: ${angles.length} angles · ${bad} floating ends`);
-      if (bad) failed++;
+        console.log(`lines: ${angles.length} angles · ${bad} floating ends`);
+        if (bad) failed++;
     }
     if (argv.includes("--perf")) {
       await page.send("Performance.enable");
@@ -650,10 +651,10 @@ async function main() {
         writeFileSync(join(out, `perf-${options.width}-${options.throttle}x.json`), JSON.stringify(runs, null, 1));
       }
     }
-    console.log(page.problems.length ? page.problems.join("\n") : "console: clean");
+    console.log(page.problems.length ? options.diagnostics ? page.problems.join("\n") : `browser warnings/errors: ${page.problems.length}` : "console: clean");
     if (page.problems.length) failed++;
   } catch (error) {
-    console.error(error);
+    console.error(options.diagnostics ? error : "Turn check failed; rerun with --diagnostics for browser details.");
     failed++;
   } finally {
     page.close();

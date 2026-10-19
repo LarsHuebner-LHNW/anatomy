@@ -17,7 +17,7 @@ async function capture(selector, svgOnly = false, keys = false) {
       ? '<svg width="80" height="40" xmlns="http://www.w3.org/2000/svg"><rect width="80" height="40" fill="green"/></svg>'
       : `<div class="iso-plate" tabindex="0" id="first" style="width:100px;height:80px;background:blue"><span data-readout>first:0</span></div><div class="iso-plate" tabindex="0" id="second" style="width:60px;height:40px;background:red"><span data-readout>second:0</span></div><script>for(const plate of document.querySelectorAll('.iso-plate'))plate.addEventListener('keydown',e=>{if(e.key==='ArrowRight')plate.querySelector('[data-readout]').textContent=plate.id+':1'})</script>`;
     await writeFile(page, '<!doctype html><style>body{margin:20px}</style>' + content);
-    const args = ["scripts/capture.mjs", page, "--out", out, "--wait", "0", "--scale", "1"];
+    const args = ["scripts/capture.mjs", page, "--out", out, "--wait", "0", "--scale", "1", "--diagnostics"];
     if (selector !== undefined) args.push("--select", selector);
     if (keys) args.push("--key", "ArrowRight");
     let result;
@@ -99,7 +99,7 @@ async function driveTarget(actions, standaloneLines = false) {
     const svg='<svg width="60" height="40" viewBox="0 0 60 40"><rect x="10" y="10" width="30" height="20" fill="none" stroke="black"/><path class="iso-line" d="M10 20L40 20" fill="none" stroke="black"/></svg>';
     await writeFile(page,`<!doctype html><style>body{margin:20px}</style><div class="iso-plate" id="first" tabindex="0" style="width:100px;height:80px"><span data-readout>first:0</span>${svg}</div><div class="iso-plate" id="second" tabindex="0" style="width:60px;height:40px"><span data-readout>second:0</span>${svg}</div><script>for(const el of document.querySelectorAll('.iso-plate'))el.addEventListener('keydown',event=>{if(event.key==='ArrowRight')el.querySelector('[data-readout]').textContent=el.id+':1'})</script>`);
     await writeFile(file,JSON.stringify(actions.map(action=>action.map(value=>value==='OUTPUT'?out:value))));
-    const args=standaloneLines?["scripts/lines.mjs",page,"--select","#missing","--wait","0"]:["scripts/drive.mjs",page,"--actions",file];
+    const args=standaloneLines?["scripts/lines.mjs",page,"--select","#missing","--wait","0","--diagnostics"]:["scripts/drive.mjs",page,"--actions",file,"--diagnostics"];
     let result;try{result={code:0,...await execute(process.execPath,args,{timeout:30000})};}catch(error){result={code:error.code,stdout:error.stdout,stderr:error.stderr};}
     let png;try{png=await readFile(out);}catch{}return{...result,png};
   }finally{await rm(directory,{recursive:true,force:true});}
