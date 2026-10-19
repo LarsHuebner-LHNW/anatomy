@@ -4,6 +4,12 @@ Checks print status and counts by default. Add `--diagnostics` only when page te
 
 Look at the figure the way a demanding reviewer would, before anyone else does. Rendering it is cheap, and guessing is expensive.
 
+## Visual verification capability
+
+Inspect actual rendered output when image inspection is available. If the producing model cannot inspect images, return the render paths, relevant views or interaction states, and specific review questions for visual inspection. A coordinating agent may perform this inspection.
+
+Do not claim visual verification from source review, successful rendering or automated checks alone. Report unavailable inspection explicitly. Follow the host environment's delegation and permission rules.
+
 ## Capture
 `scripts/capture.mjs` starts its own headless Chrome (set `CHROME_PATH` if it can't find one), loads a file or URL, and clips to `.iso-plate` by default. It also prints the readout, any console errors or exceptions, and whether the page scrolls sideways.
 

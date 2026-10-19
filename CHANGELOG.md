@@ -12,6 +12,7 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Require actual image inspection for visual verification, or an explicit review handoff when unavailable, following the host's delegation and permission rules.
 - Added evidence and fidelity guidance distinguishing illustration types, identifying sources and assumptions, and clarifying the scope of geometry audits.
 - Treat part counts as planning targets with a required review below target, retain the highly detailed visual standard, and verify the parts inventory before geometry and against the rendered mechanism before completion.
 - Narrowed automatic skill selection to physical mechanisms, cutaways, exploded views and apparatus illustrations. Explicit figure requests still select Anatomy; generic diagrams, data plots and manufacturing CAD stay with their appropriate tools.
