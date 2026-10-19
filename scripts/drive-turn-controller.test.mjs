@@ -16,7 +16,7 @@ async function run(actions, script = "") {
     await writeFile(page, `<!doctype html><div class="iso-plate" style="width:240px;height:120px"><span data-readout>rest</span></div><script>${script}</script>`);
     await writeFile(file, JSON.stringify(typeof actions === "function" ? actions(output) : actions));
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", page, "--actions", file], { timeout: 15000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", page, "--actions", file, "--diagnostics"], { timeout: 15000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     result.hasImage = await access(output).then(() => true, () => false);
     console.log(JSON.stringify(result));

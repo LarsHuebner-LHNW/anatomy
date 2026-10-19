@@ -17,7 +17,7 @@ async function drive(expression, action = "eval") {
     await writeFile(page, '<!doctype html><div class="iso-plate" tabindex="0">Owned figure</div>');
     await writeFile(actions, JSON.stringify([[action, expression, 200]]));
     try {
-      return { code: 0, ...await execute(process.execPath, [fileURLToPath(new URL("drive.mjs", import.meta.url)), page, "--actions", actions], { timeout: 30000 }) };
+      return { code: 0, ...await execute(process.execPath, [fileURLToPath(new URL("drive.mjs", import.meta.url)), page, "--actions", actions, "--diagnostics"], { timeout: 30000 }) };
     } catch (error) {
       return { code: error.code, stdout: error.stdout, stderr: error.stderr };
     }
@@ -72,7 +72,7 @@ test("drive accepts a condition that is already true however short the wait", as
     const actions = join(directory, "actions.json");
     await writeFile(page, '<!doctype html><div class="iso-plate" tabindex="0">Owned figure</div>');
     await writeFile(actions, JSON.stringify([["until", "true", 1], ["until", "Promise.resolve(1)", 1]]));
-    const result = await execute(process.execPath, [fileURLToPath(new URL("drive.mjs", import.meta.url)), page, "--actions", actions], { timeout: 30000 });
+    const result = await execute(process.execPath, [fileURLToPath(new URL("drive.mjs", import.meta.url)), page, "--actions", actions, "--diagnostics"], { timeout: 30000 });
     assert.match(result.stdout, /console: clean/);
   } finally {
     await rm(directory, { recursive: true, force: true });

@@ -19,7 +19,7 @@ for (const [name, path, x, y] of [
     await writeFile(file, `<!doctype html><div class="iso-plate"><svg width="140" height="120" viewBox="0 0 140 120"><path id="curve" fill="none" stroke="black" d="${path}"/><path class="iso-line" data-free="start" fill="none" stroke="black" d="M${x} 10L${x} ${y}"/></svg></div>`);
     const actions = JSON.stringify([["eval", `document.querySelector('#curve').isPointInStroke(new DOMPoint(${x},${y}))`], ["lines"]]);
     let result;
-    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions], { timeout: 30000 }) }; }
+    try { result = { code: 0, ...await execute(process.execPath, ["scripts/drive.mjs", file, actions, "--diagnostics"], { timeout: 30000 }) }; }
     catch (error) { result = { code: error.code, stdout: error.stdout, stderr: error.stderr }; }
     assert.match(result.stdout, /eval: true/);
     assert.equal(result.code, 0);

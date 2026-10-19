@@ -11,6 +11,8 @@ metadata:
 
 Keep private work local. Sharing or publication is a manual action outside this skill.
 
+For private figures, use local review. Do not send screenshots, page text or diagnostic output to external services without explicit authorization. Before public research, remove private details from queries.
+
 This skill makes figures like a small instrument on a bench: a heavy base on feet, rails with tick rulers, a carriage on bushings, knurled knobs, coil springs, a dial gauge whose needle moves, screws as tiny dots. The reader understands the idea because they recognise the machine. Every number the figure shows comes from the same model that moves its parts.
 
 Eight complete examples ship with the skill. Open the closest one before you start. Each framework-free example is built with `node examples/<name>/build.mjs`, which writes a standalone HTML page next to the script; add `--light` for the light theme.

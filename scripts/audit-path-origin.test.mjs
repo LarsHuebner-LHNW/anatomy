@@ -19,7 +19,7 @@ for (const [name, markup] of [
     const page = join(directory, "figure.html");
     await writeFile(page, `<!doctype html><div class="iso-plate"><svg width="100" height="100" viewBox="0 0 100 100">${markup}</svg></div>`);
     const actions = JSON.stringify([["eval", "(()=>{const b=document.querySelector('svg').getBBox();return [b.x,b.y,b.x+b.width,b.y+b.height]})()"]]);
-    const result = await execute(process.execPath, ["scripts/drive.mjs", page, actions], { timeout: 30000 });
+    const result = await execute(process.execPath, ["scripts/drive.mjs", page, actions, "--diagnostics"], { timeout: 30000 });
     const native = JSON.parse(result.stdout.match(/eval: (.*)/)[1]);
     assert.deepEqual(markupBox(markup), native);
   } finally { await rm(directory, { recursive: true, force: true }); }

@@ -28,7 +28,7 @@ window.repeat=async()=>{const node=document.querySelector('#healthy [data-readou
     await mkdir(process.env.ANATOMY_PROOF_DIR, {recursive:true});
     actions.push(["shot", join(process.env.ANATOMY_PROOF_DIR, "light.png"), "body"], ["eval", "document.body.dataset.theme='dark'"], ["shot", join(process.env.ANATOMY_PROOF_DIR, "dark.png"), "body"]);
   }
-  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", page, JSON.stringify(actions)], {timeout:30000});
+  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", page, JSON.stringify(actions), "--diagnostics"], {timeout:30000});
   const payloads = [...result.stdout.matchAll(/eval: (.*)/g)].map(match=>JSON.parse(match[1]));
   observed = payloads[0];
   observed.repeatWrites = payloads[1];

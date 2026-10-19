@@ -26,7 +26,7 @@ let native;const directory=await mkdtemp(join(tmpdir(),"anatomy-svg-attributes-"
 try{
   const page=join(directory,"figure.html");await writeFile(page,`<!doctype html><div class="iso-plate"><svg width="100" height="100">${fixtures.map(([,m],i)=>`<g id="f${i}">${m}</g>`).join("")}</svg></div>`);
   const expression=`Array.from({length:${fixtures.length}},(_,i)=>{const b=document.querySelector('#f'+i).getBBox();return[b.x,b.y,b.x+b.width,b.y+b.height]})`;
-  const result=await promisify(execFile)(process.execPath,["scripts/drive.mjs",page,JSON.stringify([["eval",expression]])],{timeout:30000});native=JSON.parse(result.stdout.match(/eval: (.*)/)[1]);
+  const result=await promisify(execFile)(process.execPath,["scripts/drive.mjs",page,JSON.stringify([["eval",expression]]),"--diagnostics"],{timeout:30000});native=JSON.parse(result.stdout.match(/eval: (.*)/)[1]);
 }finally{await rm(directory,{recursive:true,force:true});}
 fixtures.forEach(([name,markup],i)=>test(`public SVG bounds and fixed parts decode ${name}`,()=>{
   assert.deepEqual(A.markupBox(markup),native[i]);

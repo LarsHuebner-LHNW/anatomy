@@ -18,7 +18,7 @@ const changes={};function Probe({mode}){const{anchor,say}=useReadout();useLayout
 flushSync(()=>createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,...['layout','empty','healthy','repeat'].map(mode=>React.createElement(Probe,{key:mode,mode})))));setTimeout(()=>{const values=Object.fromEntries(['layout','empty','healthy','repeat'].map(mode=>[mode,document.querySelector('#'+mode+' [data-readout]').textContent]));window.readoutObserved={values,changes};document.getElementById('results').textContent=JSON.stringify(window.readoutObserved);},100);`;
   await build({ stdin: { contents: entry, resolveDir: process.cwd(), loader: "jsx" }, bundle: true, outfile: join(directory, "fixture.js"), platform: "browser", nodePaths, alias });
   writeFileSync(join(directory, "fixture.html"), '<!doctype html><html><body><div id="root"></div><pre id="results"></pre><script src="fixture.js"></script></body></html>');
-  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", join(directory, "fixture.html"), JSON.stringify([["eval", "({observed:window.readoutObserved,html:document.body.innerHTML})"]])], { timeout: 30000, maxBuffer: 16 * 1024 * 1024 });
+  const result = await promisify(execFile)(process.execPath, ["scripts/drive.mjs", join(directory, "fixture.html"), JSON.stringify([["eval", "({observed:window.readoutObserved,html:document.body.innerHTML})"]]), "--diagnostics"], { timeout: 30000, maxBuffer: 16 * 1024 * 1024 });
   const payload = result.stdout.match(/eval: (.*)/);
   assert.ok(payload, "actual ReactDOM client must complete and publish its native DOM observations");
   const inspection = JSON.parse(payload[1]);

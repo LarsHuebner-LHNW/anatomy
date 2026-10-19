@@ -18,7 +18,7 @@ async function run(actions) {
     await writeFile(page, '<!doctype html><div class="iso-plate">Figure</div>');
     await writeFile(file, JSON.stringify(actions));
     try {
-      return { code: 0, ...await execute(process.execPath, [drive, page, "--actions", file], { timeout: 30000 }) };
+      return { code: 0, ...await execute(process.execPath, [drive, page, "--actions", file, "--diagnostics"], { timeout: 30000 }) };
     } catch (error) {
       return { code: error.code, stdout: error.stdout, stderr: error.stderr };
     }

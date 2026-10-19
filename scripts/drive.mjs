@@ -24,6 +24,7 @@ function usage() {
   --no-webgl    make canvas.getContext("webgl"/"webgl2") return null, to check the SVG fallback
   --preload js  run a script before the page's own scripts (counters, stubs, hooks)
   --allow-origin url  explicitly allow this exact loopback development-server origin
+  --diagnostics print page readouts, evaluation results and browser error details
   Kit pages set their theme at build time (body data-theme), so drive the -light.html build for light.
   Put anything with eval strings in an --actions file: inline JSON quoting breaks easily.
 
@@ -58,7 +59,7 @@ Fractions are 0..1 across the element.
                                           take count frames every ms and tile them into one PNG, to catch pops and seams;
                                           each capture also takes 60-200 ms (more on heavy WebGL pages), so combine with ["slow", 0.05] for transitions
 
-Prints the readout after each shot, then console errors and exceptions.`);
+Prints status and counts by default. Use --diagnostics to include page content.`);
 }
 
 function chromePath() {
@@ -98,7 +99,7 @@ async function main() {
     usage();
     process.exit(argv.length ? 0 : 1);
   }
-  const options = { width: 1440, height: 1100, scale: 1, reduced: false, theme: null, actions: null, noWebgl: false, preload: null };
+  const options = { width: 1440, height: 1100, scale: 1, reduced: false, theme: null, actions: null, noWebgl: false, preload: null, diagnostics: false };
   const rest = [];
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
@@ -110,6 +111,7 @@ async function main() {
     else if (arg === "--no-webgl") options.noWebgl = true;
     else if (arg === "--preload") options.preload = readFileSync(argv[++index], "utf8");
     else if (arg === "--allow-origin") options.allowOrigin = argv[++index];
+    else if (arg === "--diagnostics") options.diagnostics = true;
     else if (arg === "--actions") options.actions = JSON.parse(readFileSync(argv[++index], "utf8"));
     else rest.push(arg);
   }
@@ -159,10 +161,10 @@ async function main() {
         pending.get(data.id)(data);
         pending.delete(data.id);
       } else if (data.method === "Runtime.consoleAPICalled" && (data.params.type === "error" || data.params.type === "warning")) {
-        problems.push(`console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 600)}`);
+        problems.push(options.diagnostics ? `console.${data.params.type}: ${data.params.args.map((arg) => arg.value ?? arg.description ?? "").join(" ").slice(0, 600)}` : data.params.type);
       } else if (data.method === "Runtime.exceptionThrown") {
         const detail = data.params.exceptionDetails;
-        problems.push(`exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600));
+        problems.push(options.diagnostics ? `exception: ${detail.exception?.description ?? detail.text}`.slice(0, 600) : "exception");
       }
     };
     await new Promise((done) => (socket.onopen = done));
@@ -269,7 +271,10 @@ async function main() {
         if (reply.error || !reply.result?.data) throw new Error("Chrome did not produce a PDF");
         save(args[0], reply.result.data);
         console.log(`pdf ${args[0]}`);
-      } else if (kind === "eval") console.log("eval:", JSON.stringify(await evaluate(args[0])));
+      } else if (kind === "eval") {
+        const result = await evaluate(args[0]);
+        console.log(options.diagnostics ? `eval: ${JSON.stringify(result)}` : "eval: result suppressed");
+      }
       else if (kind === "slow") await evaluate(`window.__driveSpeed=${Number(args[0])}`);
       else if (kind === "until") {
         const limit = Date.now() + (args[1] ?? 10000);
@@ -284,7 +289,7 @@ async function main() {
       else if (kind === "shot") {
         const [out, selector, scale, region] = args;
         save(out, await capture(selector, scale ?? 1, region));
-        console.log(`shot ${out} · readout "${await readout(selector)}"`);
+        console.log(options.diagnostics ? `shot ${out} · readout "${await readout(selector)}"` : `shot ${out}`);
       } else if (kind === "sheet") {
         const [out, every, count, selector, scale, region, columns] = args;
         const frames = [];
@@ -292,11 +297,11 @@ async function main() {
         for (let index = 0; index < count; index++) {
           if (index) await sleep(every);
           frames.push(await capture(selector, scale ?? 0.5, region));
-          texts.push(await readout(selector));
+          if (options.diagnostics) texts.push(await readout(selector));
         }
         const tiled = await evaluate(`(async()=>{const frames=${JSON.stringify(frames)};const cols=${columns ?? Math.min(count, 6)};const images=await Promise.all(frames.map(src=>new Promise(done=>{const image=new Image();image.onload=()=>done(image);image.src="data:image/png;base64,"+src})));const w=images[0].width,h=images[0].height,rows=Math.ceil(images.length/cols);const canvas=document.createElement("canvas");canvas.width=w*cols;canvas.height=h*rows;const ctx=canvas.getContext("2d");ctx.fillStyle="#808080";ctx.fillRect(0,0,canvas.width,canvas.height);images.forEach((image,index)=>{ctx.drawImage(image,(index%cols)*w,Math.floor(index/cols)*h);ctx.fillStyle="#ff00aa";ctx.font="bold 12px monospace";ctx.fillText(String(index),(index%cols)*w+6,Math.floor(index/cols)*h+16)});return canvas.toDataURL("image/png").split(",")[1]})()`);
         save(out, tiled);
-        console.log(`sheet ${out} · ${count} frames every ${every} ms · readouts ${texts.map((text, index) => `${index}:"${text}"`).join(" ")}`);
+        console.log(options.diagnostics ? `sheet ${out} · ${count} frames every ${every} ms · readouts ${texts.map((text, index) => `${index}:"${text}"`).join(" ")}` : `sheet ${out} · ${count} frames every ${every} ms`);
       } else if (kind === "turn") {
         const [value, group] = args;
         const call = group ? `window.__isoTurn.set(${JSON.stringify({ [group]: value })})` : `window.__isoTurn.set(${typeof value === "object" ? JSON.stringify(value) : Number(value)})`;
@@ -323,7 +328,7 @@ async function main() {
           continue;
         }
         console.log(`line ends: ${result.problems.length} of ${result.ends} ends on ${result.lines} lines float`);
-        for (const problem of result.problems) console.log(`  ${problem.what}  ${problem.end}${problem.mark ? " (a mark: neither end rooted)" : ""}  ${problem.gap == null ? "nothing nearby" : `${problem.gap.toFixed(2)} px from anything`}   at card ${problem.at.join(",")}   length ${problem.length}   d ${problem.d}…${problem.opacity < 1 ? `   opacity ${problem.opacity}` : ""}`);
+        if (options.diagnostics) for (const problem of result.problems) console.log(`  ${problem.what}  ${problem.end}${problem.mark ? " (a mark: neither end rooted)" : ""}  ${problem.gap == null ? "nothing nearby" : `${problem.gap.toFixed(2)} px from anything`}   at card ${problem.at.join(",")}   length ${problem.length}   d ${problem.d}…${problem.opacity < 1 ? `   opacity ${problem.opacity}` : ""}`);
         if (out) {
           save(out, await capture(selector, 2));
           await evaluate(`(document.querySelector("[data-line-ends]")||{remove(){}}).remove()`);
@@ -333,11 +338,11 @@ async function main() {
       }
     }
     checkAccess();
-    console.log(problems.length ? problems.join("\n") : "console: clean");
+    console.log(problems.length ? options.diagnostics ? problems.join("\n") : `browser warnings/errors: ${problems.length}` : "console: clean");
     socket.close();
     finish(failed ? 1 : 0);
   } catch (error) {
-    console.error(error);
+    console.error(options.diagnostics ? error : "Drive failed; rerun with --diagnostics for browser details.");
     finish(1);
   }
 }

@@ -36,7 +36,7 @@ export function captureScript(spec) {
   const C = ${JSON.stringify(config)};
   const TONES = ["hi", "mid", "lo", "dot"];
   const layers = [...document.querySelectorAll(C.layers)].filter((svg) => svg.viewBox && svg.viewBox.baseVal && svg.viewBox.baseVal.width);
-  if (!layers.length) return { __print: true, error: "no layers match " + C.layers };
+  if (!layers.length) return { __print: true, error: "No matching figure layers" };
   const base = layers[0];
   const vbox = base.viewBox.baseVal;
   const rect = base.getBoundingClientRect();
@@ -107,7 +107,7 @@ function drive(page, actions, { reduced, width, height, scale = 1, allowOrigin }
   const profile = mkdtempSync(join(tmpdir(), "iso-print-"));
   const file = join(profile, "actions.json");
   writeFileSync(file, JSON.stringify(actions));
-  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height), "--scale", String(scale)];
+  const args = [DRIVE, page, "--actions", file, "--width", String(width), "--height", String(height), "--scale", String(scale), "--diagnostics"];
   if (reduced) args.push("--reduced");
   if (allowOrigin) args.push("--allow-origin", allowOrigin);
   const log = join(profile, "out.txt");
@@ -116,7 +116,7 @@ function drive(page, actions, { reduced, width, height, scale = 1, allowOrigin }
   closeSync(fd);
   const stdout = readFileSync(log, "utf8");
   rmSync(profile, { recursive: true, force: true });
-  if (run.status !== 0) throw new Error(`drive.mjs failed:\n${(run.stderr || stdout || "").slice(-2000)}`);
+  if (run.status !== 0) throw new Error(`drive.mjs failed with exit status ${run.status ?? "unknown"}`);
   return stdout
     .split("\n")
     .filter((line) => line.startsWith("eval: "))
@@ -206,7 +206,7 @@ async function main() {
   const base = options.out ?? spec.out ?? spec.page.replace(/(-light)?\.html$/, "");
   const captured = await capture(spec, pagePath);
   for (const part of spec.parts ?? []) {
-    if (part.select && !captured.views[spec.main.view].boxes[part.id]) console.warn(`warning: part ${part.id} matched nothing in view ${spec.main.view}`);
+    if (part.select && !captured.views[spec.main.view].boxes[part.id]) console.warn("warning: a part matched nothing in the main view");
   }
   let failed = false;
   for (const format of formats) {
