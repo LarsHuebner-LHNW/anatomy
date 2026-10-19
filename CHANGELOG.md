@@ -12,6 +12,7 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Replaced broad sandbox-relaxation advice with approval of individual browser checks.
 - Browser checks and PDF export serve local files from a bounded loopback directory and restrict page requests to that origin. Development servers require an explicit loopback origin.
 - Chrome helpers retain the Linux sandbox and no longer request elevated execution on Windows.
 - Removed conversation-log reading and session usage collection.

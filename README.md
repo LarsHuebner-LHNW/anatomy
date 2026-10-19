@@ -167,24 +167,9 @@ Claude Code picks up new skills in a running session. If the `skills` folder its
 
 <br>
 
-The skill checks its own figures by starting headless Chrome, which writes a temporary profile and talks to it over a local port. Codex runs commands in a sandbox, and that sandbox may stop Chrome. The figure is still built; only its checks fail. In order of preference:
+The skill checks figures with headless Chrome, a temporary profile and local loopback connections. If the assistant's execution sandbox blocks Chrome, review the exact check command and its target before approving that command alone. You can also run the check yourself in a terminal, for example `node scripts/capture.mjs page.html --out shots/page.png`.
 
-1. When Codex asks to run a check outside the sandbox, approve it for that command. This needs the default `approval_policy = "on-request"`.
-2. Or allow it once in `~/.codex/config.toml`:
-
-   ```toml
-   approval_policy = "on-request"
-   sandbox_mode = "workspace-write"
-
-   [sandbox_workspace_write]
-   network_access = true
-   writable_roots = ["/tmp"]
-   ```
-
-   Newer Codex releases may name these settings differently; check the config reference for your version.
-3. Or run the check yourself in a normal terminal, for example `node scripts/capture.mjs page.html --out shots/page.png`.
-
-Starting Codex with `--sandbox danger-full-access` also works, but it lifts every limit for that session, so keep it for projects you trust.
+Keep the assistant's sandbox restrictions and Chrome's own sandbox enabled. Browser checks do not require global network access or a session with unrestricted filesystem access.
 
 </details>
 
