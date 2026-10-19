@@ -198,7 +198,7 @@ export function printPdf(htmlFile, pdfFile, { png, paper, pages: expected = 1 } 
   const binary = chromePath();
   if (!binary) throw new Error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
   const profile = mkdtempSync(join(tmpdir(), "iso-print-pdf-"));
-  const common = ["--headless=new", ...(process.platform === "linux" ? ["--no-sandbox"] : []), "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--no-default-browser-check", "--mute-audio", "--allow-file-access-from-files", `--user-data-dir=${profile}`];
+  const common = ["--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run", "--no-default-browser-check", "--mute-audio", "--allow-file-access-from-files", `--user-data-dir=${profile}`];
   const url = pathToFileURL(htmlFile).href;
   if (existsSync(pdfFile)) rmSync(pdfFile);
   spawnSync(binary, [...common, "--no-pdf-header-footer", `--print-to-pdf=${pdfFile}`, url], { stdio: "ignore", timeout: 120000 });
