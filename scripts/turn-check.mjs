@@ -1,4 +1,5 @@
 import { chromePort } from "./chrome-port.mjs";
+import { accessFlags, browserTarget, restrictBrowser } from "./browser-access.mjs";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -14,6 +15,7 @@ function usage() {
       against tubePieces, at P'(θ). Control: one prism drawn 2° off must fail.
   node turn-check.mjs page.html [--order] [--pops] [--lines] [--perf] [--step 1] [--states states.json]
                                 [--width 1440] [--height 1100] [--scale 2] [--throttle 1] [--no-webgl] [--out dir]
+                                [--allow-origin http://127.0.0.1:port]
       --order   needs a --verify build: the recorded shapes in a WebGL z-buffer (part-ID colours, 2x) against the live
                 layers' fills in DOM order. Fails on any live pair with 4 or more interior pixels. Static × live mismatches
                 are listed (the layer proofs and the orbit audit own them). Control: each live layer's order reversed at
@@ -52,14 +54,15 @@ function chromePath() {
   return candidates.find((path) => existsSync(path));
 }
 
-async function browser(target, { width, height, scale, throttle, noWebgl }) {
+async function browser(target, { width, height, scale, throttle, noWebgl, allowOrigin }) {
   const binary = chromePath();
   if (!binary) {
     console.error("No Chrome found. Set CHROME_PATH to a Chrome or Chromium binary.");
     process.exit(1);
   }
+  const access = await browserTarget(target, allowOrigin);
   const profile = mkdtempSync(join(tmpdir(), "turn-check-"));
-  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", "--allow-file-access-from-files", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
+  const chrome = spawn(binary, ["--headless=new", "--remote-debugging-port=0", `--user-data-dir=${profile}`, "--no-first-run", "--no-default-browser-check", "--hide-scrollbars", ...accessFlags, "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist", "about:blank"]);
   const port = await chromePort(chrome, profile);
   const page = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: "PUT" })).json();
   const socket = new WebSocket(page.webSocketDebuggerUrl);
@@ -88,20 +91,23 @@ async function browser(target, { width, height, scale, throttle, noWebgl }) {
   };
   await send("Runtime.enable");
   await send("Page.enable");
+  const checkAccess = await restrictBrowser(socket, send, access.origin);
   const NO_GL = `(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...rest){if(/webgl/.test(String(kind))&&!this.dataset.check)return null;return get.call(this,kind,...rest)}})();`;
   if (noWebgl) await send("Page.addScriptToEvaluateOnNewDocument", { source: NO_GL });
   await send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: scale, mobile: width < 600 });
   if (throttle > 1) await send("Emulation.setCPUThrottlingRate", { rate: throttle });
-  const url = /^https?:|^file:/.test(target) ? target : pathToFileURL(resolve(target)).href;
-  await send("Page.navigate", { url });
+  const navigation = await send("Page.navigate", { url: access.url });
+  if (navigation.error || navigation.result?.errorText) throw new Error("Navigation failed");
   await new Promise((done) => setTimeout(done, 1500));
   const close = () => {
+    access.close();
     socket.close();
     chrome.kill("SIGKILL");
     try {
       rmSync(profile, { recursive: true, force: true });
     } catch {}
   };
+  checkAccess();
   return { send, evaluate, close, problems };
 }
 
@@ -516,7 +522,7 @@ async function main() {
     console.log(failed ? `fidelity failed: ${failed}` : "fidelity passed");
     process.exit(failed ? 1 : 0);
   }
-  const options = { width: Number(value("--width", 1440)), height: Number(value("--height", 1100)), scale: Number(value("--scale", argv.includes("--perf") ? (Number(value("--width", 1440)) < 600 ? 3 : 2) : 1)), throttle: Number(value("--throttle", 1)), noWebgl: argv.includes("--no-webgl") };
+  const options = { width: Number(value("--width", 1440)), height: Number(value("--height", 1100)), scale: Number(value("--scale", argv.includes("--perf") ? (Number(value("--width", 1440)) < 600 ? 3 : 2) : 1)), throttle: Number(value("--throttle", 1)), noWebgl: argv.includes("--no-webgl"), allowOrigin: value("--allow-origin", undefined) };
   const step = Number(value("--step", 1));
   if (!Number.isFinite(step) || step <= 0 || step > 360) throw new Error("--step must be a finite number greater than 0 and at most 360 degrees");
   const fine = Number(value("--fine", 0.1));

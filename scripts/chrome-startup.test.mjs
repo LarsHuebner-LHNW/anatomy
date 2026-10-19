@@ -18,6 +18,7 @@ for (const name of ["capture", "drive", "turn-check"]) {
       const receipt = join(directory, "profile.txt");
       await writeFile(binary, '#!/bin/sh\nfor arg in "$@"; do\n  case "$arg" in --user-data-dir=*) printf "%s" "${arg#--user-data-dir=}" > "$ANATOMY_PROFILE_RECEIPT";; esac\ndone\nexit 7\n');
       await chmod(binary, 0o755);
+      await writeFile(join(directory, "figure.html"), "<!doctype html><p>Figure</p>");
       const started = performance.now();
       let result;
       try {

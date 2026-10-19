@@ -24,7 +24,8 @@ test("drive waits for a slow page to finish loading before running actions", asy
   try {
     const { port } = server.address();
     const actions = JSON.stringify([["eval", "document.readyState + ' ' + Boolean(window.slowScriptRan)"]]);
-    const result = await execute(process.execPath, [drive, `http://127.0.0.1:${port}/`, actions], { timeout: 30000 });
+    const origin = `http://127.0.0.1:${port}`;
+    const result = await execute(process.execPath, [drive, `${origin}/`, actions, "--allow-origin", origin], { timeout: 30000 });
     assert.match(result.stdout, /eval: "complete true"/);
   } finally {
     server.close();

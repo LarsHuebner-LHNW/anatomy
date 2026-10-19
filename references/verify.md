@@ -13,13 +13,16 @@ node scripts/capture.mjs page.html --out shots/tour.png --times 1200,2400,3600  
 node scripts/capture.mjs page.html --out shots/keys.png --key ArrowRight,ArrowRight
 node scripts/capture.mjs page.html --out shots/joint.png --zoom 200,80,220,170  # close-up at 4x, in card px
 node scripts/capture.mjs page.html --out shots/still.png --reduced              # reduced motion
-node scripts/capture.mjs http://localhost:3000/docs --select "figure:nth-of-type(3) .iso-plate"   # one figure on a dev-server page
+node scripts/capture.mjs http://127.0.0.1:3000/docs --allow-origin http://127.0.0.1:3000 --select "figure:nth-of-type(3) .iso-plate"   # one figure on a dev-server page
 ```
 `--select` takes any CSS selector; by default it clips to the first `.iso-plate`. Each `--times` delay counts from the first shot, so `1200,2400,3600` shoots at about 1.2, 2.4 and 3.6 s after it (a capture takes 60–200 ms, so delays closer together than that run late), saved as `name-<ms>.png`. `--key` sends the same key codes as `drive.mjs` (`7` as `Digit7`, `.` as `Period`; write a comma as `Comma`, since the list is comma separated). The other options are `--height` (1000), `--scale` (2), `--wait` (2500 ms before the first shot), `--zoom-scale` (4) and `--theme dark|light`. Read every PNG you make: open it and look.
 
 Both scripts start Chrome with WebGL on (`--enable-unsafe-swiftshader --ignore-gpu-blocklist`), so shaders show in `capture.mjs` stills too. Use `drive.mjs` for anything that has to be timed or slowed down.
 
 ## Drive
+
+Local pages load assets only from their own directory and its subdirectories. Remote resources are blocked. A development server must be on loopback and requires `--allow-origin` with its exact origin; WebSockets and workers remain blocked. Keep needed assets local and inside the figure folder.
+
 `scripts/drive.mjs` runs a scripted session in headless Chrome with WebGL on. Use it for sequences: hover, then click, then type, then wait for a phase. Use it also for slowed-down contact sheets that catch pops, and for the no-WebGL fallback. It prints the readout after each shot, then any console errors and exceptions.
 
 ```sh
@@ -46,6 +49,7 @@ Options are `--width` (1440), `--height` (1100), `--scale` (1), `--reduced`, `--
 | `["until", js, timeoutMs?]` | Polls a JS expression every 25 ms until it is truthy (default 10 s), and prints a line if it times out. |
 | `["eval", js]` | Runs JS in the page and prints the result. Promises are awaited. |
 | `["shot", out, sel?, scale?, [x,y,w,h]?]` | Screenshots an element, or a region of it in CSS px. |
+| `["pdf", out]` | Prints a PDF using the page's CSS paper size, through the same local access controls. |
 | `["sheet", out, every, count, sel?, scale?, [x,y,w,h]?, columns?]` | Takes `count` frames `every` ms apart and tiles them into one numbered PNG. |
 | `["turn", value, group?]` | 3D figures: sets `window.__isoTurn` (a number sets the first turn group, `group` names another, an object sets several) and waits two frames. |
 | `["orbit", out, from, to, step, sel?, scale?, [x,y,w,h]?, columns?]` | 3D figures: a contact sheet across angles of the first turn group, each frame labelled. `["orbit", "swap.png", 129.7, 130.2, 0.1, null, 6, [x, y, w, h]]` is a 6× close-up of one order change. |

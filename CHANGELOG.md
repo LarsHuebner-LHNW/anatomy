@@ -12,6 +12,7 @@ All notable changes to Anatomy are recorded here. The format follows [Keep a Cha
 
 ### Changed
 
+- Browser checks and PDF export serve local files from a bounded loopback directory and restrict page requests to that origin. Development servers require an explicit loopback origin.
 - Chrome helpers retain the Linux sandbox and no longer request elevated execution on Windows.
 - Removed conversation-log reading and session usage collection.
 - Removed the community publisher and its instructions. Sharing is a manual action outside the skill.

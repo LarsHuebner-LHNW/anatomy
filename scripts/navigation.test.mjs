@@ -22,6 +22,7 @@ async function run(name, kind) {
       await new Promise((resolve) => server.close(resolve));
     }
     const args = [fileURLToPath(new URL(`${name}.mjs`, import.meta.url)), target, ...(name === "capture" ? ["--out", join(directory, "shot.png"), "--wait", "0"] : ["[]"])];
+    if (kind === "refused") args.push("--allow-origin", new URL(target).origin);
     try {
       return { code: 0, ...await execute(process.execPath, args, { timeout: 30000 }) };
     } catch (error) {
@@ -36,7 +37,7 @@ for (const name of ["capture", "drive"]) {
   test(`${name} fails a missing local page`, async () => {
     const result = await run(name, "missing");
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /Navigation failed.*ERR_FILE_NOT_FOUND/);
+    assert.match(result.stderr, /ENOENT/);
     assert.doesNotMatch(result.stdout, /console: clean/);
   });
 
