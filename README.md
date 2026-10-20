@@ -1,5 +1,19 @@
 <h1 align="center">Anatomy</h1>
 
+This is a fork with custom changes to suit my workflow better.
+
+Main changes compared to [upstream](https://github.com/wheresryan22/anatomy):
+
+- Removed the built-in upload/publication workflow and conversation-log access; sharing stays manual and external.
+- Browser checks retain Chrome's sandbox, restrict local file and page network access, and clean up temporary browser and print resources.
+- Page text in diagnostic output is opt-in via `--diagnostics`; an ignored `private/` directory is available for local sources and exports.
+- Automatic selection focuses on physical mechanisms, cutaways, exploded views and apparatus illustrations.
+- Part counts are planning targets, with explicit completeness reviews and the highly detailed visual standard retained.
+- Evidence and fidelity guidance distinguishes illustrations from engineering evidence. Visual verification requires actual image inspection; unavailable inspection must be reported with a review handoff.
+- Installation and contribution instructions target this fork's `dev` branch.
+
+---
+
 <p align="center"><b>A Claude skill that explains an idea by building it as a real, working object.</b><br>Also runs in Antigravity, OpenCode, Codex and MiniMax Code.<br>Crafted, interactive isometric figures with many small precise parts, in SVG, WebGL and 3D.</p>
 
 <p align="center">
@@ -8,15 +22,13 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1b1b19?style=flat-square" alt="MIT license"></a>
   <a href="#requirements"><img src="https://img.shields.io/badge/node-%E2%89%A5%2020.10-1b1b19?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node 20.10 or later"></a>
   <a href="#requirements"><img src="https://img.shields.io/badge/dependencies-0-1b1b19?style=flat-square" alt="No dependencies"></a>
-  <a href="https://github.com/wheresryan22/anatomy/actions/workflows/ci.yml"><img src="https://github.com/wheresryan22/anatomy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/LarsHuebner-LHNW/anatomy/actions/workflows/ci.yml"><img src="https://github.com/LarsHuebner-LHNW/anatomy/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
 </p>
 
+Original authors website:
 <p align="center">
   <a href="https://skills.wheresryan.sh/anatomy"><img src="https://img.shields.io/badge/Website-skills.wheresryan.sh%2Fanatomy-1b1b19?style=for-the-badge" alt="Website: skills.wheresryan.sh/anatomy"></a>
   &nbsp;
-  <a href="https://github.com/wheresryan22/anatomy/archive/refs/heads/main.zip"><img src="https://img.shields.io/badge/Download-ZIP-1b1b19?style=for-the-badge&logo=github&logoColor=white" alt="Download ZIP"></a>
-  &nbsp;
-  <a href="#install"><img src="https://img.shields.io/badge/Install-npx_skills_add-d7d7d0?style=for-the-badge&labelColor=1b1b19&logo=npm&logoColor=white" alt="Install with npx"></a>
 </p>
 
 <p align="center">
@@ -44,11 +56,39 @@ Then Claude builds that thing out of dozens of small, solid, shaded parts, puts 
 
 ## Quick start
 
+This setup is for OpenCode. Other agents probably work similar.
+
 ```sh
-npx skills add wheresryan22/anatomy -g
+git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git
+cd anatomy
+export anatomy_installdir="$HOME/.config/opencode/skills/anatomy"
+
+rsync -av \
+  --exclude='.DS_Store' \
+  --exclude='*.test.mjs' \
+  --exclude='__pycache__/' \
+  --include='/SKILL.md' \
+  --include='/LICENSE' \
+  --include='/README.md' \
+  --include='SECURITY.md' \
+  --include='/kit/***' \
+  --include='/references/***' \
+  --include='/scripts/***' \
+  --include='/examples/***' \
+  --exclude='*' \
+  "." \
+  "$anatomy_installdir"
 ```
 
-The CLI asks which agents to set up (Claude Code, Antigravity, OpenCode, Codex, MiniMax Code). To skip the question, add `-a claude-code`, `-a antigravity`, `-a opencode`, `-a codex`, or `-a minimax-code`.
+Another possible way is
+
+```sh
+npx skills add "." --global --agent AGENT --skill anatomy --copy
+```
+
+AGENT can be for example the identifiers of Claude Code, Antigravity, OpenCode, Codex, MiniMax Code: `--agent claude-code`, `--agent antigravity`, `--agent opencode`, `--agent codex`, or `--agent minimax-code`.
+
+However, the second option does not guarantee that the skill installation respects "copy" and can still put the skill in `$HOME/.agents/skills/anatomy` only. 
 
 Then, in Claude Code:
 
@@ -103,19 +143,13 @@ Anatomy is a standard [Agent Skill](https://agentskills.io): a folder with a `SK
 
 | | Command | Installs to |
 |---|---|---|
-| **skills CLI**, for you (Claude Code) | `npx skills add wheresryan22/anatomy -g -a claude-code` | `~/.claude/skills/anatomy` |
-| **skills CLI**, for you (Antigravity) | `npx skills add wheresryan22/anatomy -g -a antigravity` | `~/.gemini/antigravity/skills/anatomy` |
-| **skills CLI**, for you (OpenCode) | `npx skills add wheresryan22/anatomy -g -a opencode` | `~/.config/opencode/skills/anatomy` |
-| **skills CLI**, for you (Codex) | `npx skills add wheresryan22/anatomy -g -a codex` | `~/.agents/skills/anatomy` |
-| **skills CLI**, for you (MiniMax Code) | `npx skills add wheresryan22/anatomy -g -a minimax-code` | `~/.minimax/skills/anatomy` |
-| **skills CLI**, for one project | `npx skills add wheresryan22/anatomy` | `.claude/skills/anatomy` for Claude Code, `.agents/skills/anatomy` for Antigravity, OpenCode and Codex, `.minimax/skills/anatomy` for MiniMax Code |
-| **git**, for you (Claude Code) | `git clone https://github.com/wheresryan22/anatomy.git ~/.claude/skills/anatomy` | `~/.claude/skills/anatomy` |
-| **git**, for you (Antigravity) | `git clone https://github.com/wheresryan22/anatomy.git ~/.gemini/antigravity/skills/anatomy` | `~/.gemini/antigravity/skills/anatomy` |
-| **git**, for you (OpenCode) | `git clone https://github.com/wheresryan22/anatomy.git ~/.config/opencode/skills/anatomy` | `~/.config/opencode/skills/anatomy` |
-| **git**, for you (Codex) | `git clone https://github.com/wheresryan22/anatomy.git ~/.agents/skills/anatomy` | `~/.agents/skills/anatomy` |
-| **git**, for you (MiniMax Code) | `git clone https://github.com/wheresryan22/anatomy.git ~/.minimax/skills/anatomy` | `~/.minimax/skills/anatomy` |
-| **git**, for one project | `git clone https://github.com/wheresryan22/anatomy.git .claude/skills/anatomy` | `.claude/skills/anatomy` (Claude Code and OpenCode) or `.agents/skills/anatomy` (Antigravity, OpenCode, Codex and MiniMax Code) |
-| **Download**, no git | see below | any of the folders above |
+| **git**, for you (Claude Code) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.claude/skills/anatomy` | `~/.claude/skills/anatomy` |
+| **git**, for you (Antigravity) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.gemini/antigravity/skills/anatomy` | `~/.gemini/antigravity/skills/anatomy` |
+| **git**, for you (OpenCode) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.config/opencode/skills/anatomy` | `~/.config/opencode/skills/anatomy` |
+| **git**, for you (Codex) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.codex/skills/anatomy` | `~/.codex/skills/anatomy` |
+| **git**, for you (MiniMax Code) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.minimax/skills/anatomy` | `~/.minimax/skills/anatomy` |
+| **git**, for one project | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git .claude/skills/anatomy` | `.claude/skills/anatomy` (Claude Code and OpenCode) or `.agents/skills/anatomy` (Antigravity, OpenCode, Codex and MiniMax Code) |
+| **git**, global (except Claude Code) | `git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git ~/.agents/skills/anatomy` | `~/.agents/skills/anatomy` (Antigravity, OpenCode, Codex and MiniMax Code) |
 
 <details>
 <summary><b>With the skills CLI</b></summary>
@@ -133,32 +167,7 @@ The CLI copies the whole repository, examples included (about 10 MB). It needs a
 
 <br>
 
-Clone the repository into one of the skill folders, so that `SKILL.md` ends up at `<skills folder>/anatomy/SKILL.md`. For Claude Code use `~/.claude/skills/anatomy` or `.claude/skills/anatomy`. For Antigravity use `~/.gemini/antigravity/skills/anatomy` or `.agents/skills/anatomy`. For OpenCode use `~/.config/opencode/skills/anatomy` or `.opencode/skills/anatomy`; OpenCode also reads the Claude Code and `.agents` folders. For Codex use `~/.agents/skills/anatomy` or `.agents/skills/anatomy`. For MiniMax Code use `~/.minimax/skills/anatomy` (or `$MINIMAX_DATA_DIR/skills/anatomy` if you moved its data folder) or `.minimax/skills/anatomy`; MiniMax Code also reads the Claude Code, Codex and `.agents` folders. For a project install, commit the folder so your team gets it too. To update later, `git pull` inside that folder.
-
-</details>
-
-<details>
-<summary><b>Download, without git</b></summary>
-
-<br>
-
-[Download the ZIP](https://github.com/wheresryan22/anatomy/archive/refs/heads/main.zip), unpack it, rename the folder from `anatomy-main` to `anatomy`, and move it into `~/.claude/skills/` (Claude Code), `~/.gemini/antigravity/skills/` (Antigravity), `~/.config/opencode/skills/` (OpenCode), `~/.agents/skills/` (Codex) or `~/.minimax/skills/` (MiniMax Code).
-
-Or in one line on macOS or Linux:
-
-```sh
-mkdir -p ~/.claude/skills/anatomy && curl -L https://github.com/wheresryan22/anatomy/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1 -C ~/.claude/skills/anatomy
-```
-
-For Antigravity, OpenCode, Codex or MiniMax Code, put the same files in `~/.gemini/antigravity/skills/anatomy`, `~/.config/opencode/skills/anatomy`, `~/.agents/skills/anatomy` or `~/.minimax/skills/anatomy`:
-
-```sh
-mkdir -p ~/.gemini/antigravity/skills/anatomy && curl -L https://github.com/wheresryan22/anatomy/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1 -C ~/.gemini/antigravity/skills/anatomy
-```
-
-```sh
-mkdir -p ~/.config/opencode/skills/anatomy && curl -L https://github.com/wheresryan22/anatomy/archive/refs/heads/main.tar.gz | tar -xz --strip-components=1 -C ~/.config/opencode/skills/anatomy
-```
+Clone the repository into one of the skill folders, so that `SKILL.md` ends up at `<skills folder>/anatomy/SKILL.md`. For Claude Code use `~/.claude/skills/anatomy` or `.claude/skills/anatomy`. For Antigravity use `~/.gemini/antigravity/skills/anatomy` or `.agents/skills/anatomy`. For OpenCode use `~/.config/opencode/skills/anatomy` or `.opencode/skills/anatomy`; OpenCode also reads the Claude Code and `.agents` folders. For Codex use `~/.codex/skills/anatomy` or `.agents/skills/anatomy`. For MiniMax Code use `~/.minimax/skills/anatomy` (or `$MINIMAX_DATA_DIR/skills/anatomy` if you moved its data folder) or `.minimax/skills/anatomy`; MiniMax Code also reads the Claude Code, Codex and `.agents` folders. For a project install, commit the folder so your team gets it too. To update later, `git pull` inside that folder.
 
 </details>
 
@@ -312,14 +321,13 @@ anatomy/
 
 ## Contributing
 
-Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers building the examples, the checks, and the house rules a change has to keep (among them, no comments in code, and kit changes that leave every existing example byte-identical). Please follow the [Code of Conduct](CODE_OF_CONDUCT.md), and report security problems as described in [SECURITY.md](SECURITY.md).
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it covers building the examples, the checks, and the house rules a change has to keep (among them, no comments in code, and kit changes that leave every existing example byte-identical). Report security problems as described in [SECURITY.md](SECURITY.md).
 
-- [Report a bug](https://github.com/wheresryan22/anatomy/issues/new?template=bug_report.yml)
-- [Request a figure](https://github.com/wheresryan22/anatomy/issues/new?template=figure_request.yml)
+- [Report a bug](https://github.com/LarsHuebner-LHNW/anatomy/issues/new?template=bug_report.yml)
 - [Changelog](CHANGELOG.md)
 
 ## License
 
-[MIT](LICENSE) © 2026 Ryan · [@wheresryan22](https://x.com/wheresryan22)
+[MIT](LICENSE)
 
-<p align="center"><sub>If Anatomy drew something useful for you, a ⭐ helps other people find it.</sub></p>
+Original License information: [MIT](LICENSE) © 2026 Ryan · [@wheresryan22](https://x.com/wheresryan22)

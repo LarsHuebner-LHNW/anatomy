@@ -2,8 +2,6 @@
 
 Thank you for helping. Anatomy is judged by how its figures look at 4× zoom, so most of this guide is about checking your work before anyone else does.
 
-By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-
 ## Setup
 
 You need:
@@ -13,7 +11,7 @@ You need:
 - **Claude Code**, Antigravity, OpenCode, Codex or MiniMax Code, to try the skill itself.
 
 ```sh
-git clone https://github.com/wheresryan22/anatomy.git
+git clone --branch dev https://github.com/LarsHuebner-LHNW/anatomy.git
 cd anatomy
 ```
 
@@ -34,13 +32,16 @@ ln -s "$PWD" ~/.config/opencode/skills/anatomy
 ```
 
 ```sh
-ln -s "$PWD" ~/.agents/skills/anatomy
+ln -s "$PWD" ~/.codex/skills/anatomy
 ```
 
 ```sh
 ln -s "$PWD" ~/.minimax/skills/anatomy
 ```
 
+```sh
+ln -s "$PWD" ~/.agents/skills/anatomy
+```
 ## Building the examples
 
 Each framework-free example is one script that writes standalone pages next to itself. The built pages are committed.
@@ -153,7 +154,7 @@ These come from [`SKILL.md`](SKILL.md) and [`references/`](references). A pull r
 ## Pull requests
 
 1. Open an issue first for anything larger than a fix, so we can agree on the approach.
-2. Fork the repository and branch from `main`.
+2. Fork the repository and branch from `dev`.
 3. Make one change per pull request.
 4. Rebuild every example and confirm that `git status --short` shows only what you meant to change.
 5. Run the checks that apply, and attach screenshots in both themes for any visual change.
@@ -164,4 +165,4 @@ CI must pass before a merge.
 
 ## Reporting a bug or asking for a figure
 
-Use the [issue forms](https://github.com/wheresryan22/anatomy/issues/new/choose). For a figure that came out wrong, use a public, minimal reproduction: the theme, where the figure lives (HTML, SVG or React), and a screenshot or close-up of the fault. Remove private data from prompts, figures and logs before sharing them.
+Use the [issue forms](https://github.com/LarsHuebner-LHNW/anatomy/issues/new/choose). For a figure that came out wrong, use a public, minimal reproduction: the theme, where the figure lives (HTML, SVG or React), and a screenshot or close-up of the fault. Remove private data from prompts, figures and logs before sharing them.

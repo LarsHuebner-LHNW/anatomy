@@ -24,10 +24,10 @@ A security problem is anything in this repository that could let a page, a promp
 
 ## Supported versions
 
-Only the latest commit on `main` is supported.
+Only the latest commit on `dev` is supported.
 
 ## Reporting a vulnerability
 
-Please don't open a public issue for a security problem. Report it privately through GitHub's [private vulnerability reporting](https://github.com/wheresryan22/anatomy/security/advisories/new) for this repository. If that link does not work, send a direct message to [@wheresryan22](https://x.com/wheresryan22) on X asking for a private channel, without the details.
+Please don't open a public issue for a security problem. Report it privately through GitHub's [private vulnerability reporting](https://github.com/larshuebner-lhnw/anatomy/security/advisories/new) for this repository.
 
 Include what you found, how to reproduce it, and what it could let someone do.
